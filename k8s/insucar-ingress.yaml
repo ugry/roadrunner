@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: insucar
+  namespace: insucar
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"   # 443-only: 80 just 301s to https
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - unysolar.com
+        - app.unysolar.com
+        - op.unysolar.com
+      secretName: insucar-tls
+  rules:
+    - host: unysolar.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: insucar-api, port: { number: 80 } } }
+    - host: app.unysolar.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: insucar-api, port: { number: 80 } } }
+    - host: op.unysolar.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: insucar-api, port: { number: 80 } } }

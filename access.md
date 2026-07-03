@@ -150,7 +150,14 @@ Operator console (login by agent ID) at http://<app-lb>/ops-console-7f3a9c :
 Current app LB: (see `kubectl -n insucar get svc insucar-api`)
 
 ## Live domains (functional)
-- Users:     http://unysolar.com/  (also app.unysolar.com) — landing + login/register + request assistance
-- Operators: http://op.unysolar.com/ — Mission-Control operator console (agent login only)
+- Users:     https://unysolar.com/  (also app.unysolar.com) — landing + login/register + request assistance
+- Operators: https://op.unysolar.com/ — Mission-Control operator console (agent login only)
 - Backend routes by Host: op.* -> operator console; apex -> user landing (users only / operators only).
 - Same seeded logins (users by email, agents by agent ID) apply.
+
+## TLS / HTTPS (Let's Encrypt)
+- ingress-nginx (ns ingress-nginx) LB terminates TLS on 443; cert-manager issues Let's Encrypt certs.
+- ClusterIssuer: letsencrypt-prod (HTTP-01). Cert secret: insucar-tls (ns insucar), hosts
+  unysolar.com / app.unysolar.com / op.unysolar.com. Auto-renews.
+- Port 80 only 308-redirects to 443 (force-ssl-redirect). insucar-api svc is now ClusterIP
+  (only the ingress LB is public). Ingress LB is the Route53 alias target for all 3 hosts.
