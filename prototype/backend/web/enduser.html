@@ -36,6 +36,12 @@
   .logo{width:34px;height:34px}
   .topbtn{border:1px solid var(--line);background:#fff;color:var(--navy);font-weight:700;font-size:14px;padding:8px 16px;border-radius:10px;cursor:pointer}
   .topbtn:hover{border-color:var(--brand);color:var(--brand)}
+  .case-item{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fbfdfc}
+  .case-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .case-no{font-weight:800;font-size:14px}
+  .case-type{font-size:12px;color:var(--muted);text-transform:capitalize;margin-top:3px}
+  .case-desc{margin-top:6px;font-size:14px;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;white-space:normal}
+  #cases{max-height:60vh;overflow-y:auto}
 </style></head>
 <body>
 <div class="bar">
@@ -95,7 +101,10 @@ async function register(){const r=await api('/api/register',{method:'POST',body:
 async function logout(){await api('/api/logout',{method:'POST'});location.reload();}
 function enter(me){el('authcard').classList.add('hidden');el('dash').classList.remove('hidden');el('whoami').textContent=me.name||'';el('me2').textContent=me.name||'';el('loginTop').classList.add('hidden');el('logoutTop').classList.remove('hidden');loadCases();}
 async function submitIncident(){const r=await api('/api/user/incident',{method:'POST',body:JSON.stringify({incident:v('i_type'),description:v('i_desc'),address:v('i_addr')})});if(r.ok){alert('Case created: '+r.body.case_number+' — a coordinator will assist you.');loadCases();}else alert('Error: '+(r.body.error||r.status));}
-async function loadCases(){const r=await api('/api/user/cases');const c=r.body.cases||[];if(!c.length){el('cases').textContent='No cases yet.';return;}let h='<table><tr><th>Case</th><th>Type</th><th>Status</th><th>Details</th></tr>';c.forEach(x=>h+=`<tr><td>${x.case_number.replace('CASE-','#')}</td><td>${x.incident}</td><td><span class="pill">${x.status}</span></td><td>${x.description||''}</td></tr>`);el('cases').innerHTML=h+'</table>';}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function loadCases(){const r=await api('/api/user/cases');const c=r.body.cases||[];if(!c.length){el('cases').textContent='No cases yet.';return;}
+ let h='';c.forEach(x=>h+=`<div class="case-item"><div class="case-top"><span class="case-no">${esc(x.case_number.replace('CASE-','Case #'))}</span><span class="pill">${esc(x.status)}</span></div><div class="case-type">${esc(x.incident).replace(/_/g,' ')}</div>${x.description?`<div class="case-desc">${esc(x.description)}</div>`:''}</div>`);
+ el('cases').innerHTML=h;}
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
 </script>
 </body></html>
