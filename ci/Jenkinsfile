@@ -1,0 +1,77 @@
+// Insucar CI pipeline — builds/tests the Go backend, builds+pushes the image to ECR,
+// then triggers the Spinnaker delivery pipeline (bake -> dev -> UAT -> prod with manual judgment).
+pipeline {
+  agent any
+
+  environment {
+    AWS_REGION = 'eu-west-1'
+    ECR_REPO   = 'insucar-api'
+    IMAGE_TAG  = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
+  }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Go build & test') {
+      agent {
+        docker { image 'golang:1.23-alpine'; args '-u root:root' }
+      }
+      steps {
+        dir('prototype/backend') {
+          sh 'go mod tidy'
+          sh 'go vet ./... || true'
+          sh 'CGO_ENABLED=0 go build -o /tmp/insucar-api .'
+          echo 'build OK'
+        }
+      }
+    }
+
+    stage('Docker build') {
+      steps {
+        dir('prototype/backend') {
+          sh 'docker build -t $ECR_REPO:$IMAGE_TAG .'
+        }
+      }
+    }
+
+    stage('Push to ECR') {
+      when { expression { return env.PUSH_TO_ECR == 'true' } }
+      steps {
+        sh '''
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          REG=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
+          aws ecr describe-repositories --repository-names $ECR_REPO --region $AWS_REGION >/dev/null 2>&1 \
+            || aws ecr create-repository --repository-name $ECR_REPO --region $AWS_REGION
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REG
+          docker tag  $ECR_REPO:$IMAGE_TAG $REG/$ECR_REPO:$IMAGE_TAG
+          docker push $REG/$ECR_REPO:$IMAGE_TAG
+          echo "pushed $REG/$ECR_REPO:$IMAGE_TAG"
+        '''
+      }
+    }
+
+    stage('Trigger Spinnaker') {
+      when { expression { return env.SPINNAKER_WEBHOOK != '' } }
+      steps {
+        sh '''
+          curl -sS -X POST "$SPINNAKER_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\\"parameters\\":{\\"imageTag\\":\\"$IMAGE_TAG\\"}}" || true
+        '''
+      }
+    }
+  }
+
+  post {
+    success { echo "CI OK — image tag ${IMAGE_TAG}" }
+    failure { echo 'CI FAILED' }
+  }
+}

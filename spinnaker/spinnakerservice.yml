@@ -1,0 +1,44 @@
+# Spinnaker installed via the spinnaker-operator (kind: SpinnakerService).
+# Persistence: S3. Auth/exposure kept minimal for the prototype; harden before production.
+apiVersion: spinnaker.io/v1alpha2
+kind: SpinnakerService
+metadata:
+  name: spinnaker
+spec:
+  spinnakerConfig:
+    config:
+      version: 1.36.1
+      persistentStorage:
+        persistentStoreType: s3
+        s3:
+          bucket: insucar-spinnaker-326804802908
+          rootFolder: front50
+          region: eu-west-1
+      features:
+        pipelineTemplates: true
+      # Jenkins (igor) integration — CI triggers/queries
+      ci:
+        jenkins:
+          enabled: true
+          masters:
+            - name: insucar-jenkins
+              address: http://jenkins.jenkins.svc.cluster.local:8080
+              username: admin
+              # password supplied via profiles/secret at apply time
+      # Kubernetes deploy target (in-cluster account)
+      providers:
+        kubernetes:
+          enabled: true
+          accounts:
+            - name: insucar-k8s
+              requiredGroupMembership: []
+              providerVersion: V2
+              permissions: {}
+              dockerRegistries: []
+              context: default
+              onlySpinnakerManaged: true
+  # Expose Deck (UI) and Gate (API) via LoadBalancer for the prototype
+  expose:
+    type: service
+    service:
+      type: LoadBalancer
