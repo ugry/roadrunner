@@ -51,7 +51,28 @@ status link → case resolved → all events visible in Grafana across auth/syst
   direct-to-prod path.
 - Separate AWS accounts per tier (Organizations); separate IAM/RBAC/secrets/networks.
 - Dev agents have ZERO production access. Only DevOps/Operations engineers own production
-  (documented RACI + break-glass + full audit).
+   (documented RACI + break-glass + full audit).
+
+## Access control & change management (PAM / just-in-time, separation of duties)
+- Principle of least privilege everywhere. NO standing production access for anyone by default.
+- Developers / dev agents: least-privilege, dev-tier ONLY. Never any production access (standing
+  or elevated). At most read-only in UAT when explicitly needed.
+- Operations engineers ("operators"): MAY hold elevated/full privileges, but these are exercised
+  ONLY through an approved Change & Release Management system — not as standing access.
+- Roles (must be distinct identities — no self-approval):
+  - Requester  — proposes a change (PR + change ticket, test evidence, rollback plan).
+  - Approver(s) — review and authorize; cannot also execute the same change.
+  - Executor / Builder — applies the approved change to production.
+- Production change access is JUST-IN-TIME and TIME-BOUND. Executors receive prod change access
+  ONLY during:
+  - (a) an approved change window, or
+  - (b) a declared emergency (break-glass).
+  Access auto-expires at the end of the window/incident. Break-glass requires post-hoc review and
+  a retrospective change record.
+- Enforcement: IAM roles + short-lived STS/AssumeRole sessions (bounded session duration); MFA
+  required for any elevation; approval gates in the GitOps/CD pipeline (e.g., ArgoCD sync windows
+  + manual approval step); every elevation, approval, and execution emitted to auth.log with
+  approver + executor identities and the linked change ticket.
 
 ## Security requirements
 - Domain: DNSSEC, registrar lock, CAA. Network: WAF/CDN edge, private subnets, no public DB,
