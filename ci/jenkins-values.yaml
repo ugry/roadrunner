@@ -1,14 +1,13 @@
 # Helm values for the official Jenkins chart (jenkinsci/jenkins).
 # Config-as-Code: admin user, plugin set, and a seeded Insucar pipeline job from the repo.
 controller:
-  adminUser: "admin"
-  # adminPassword is provided at install time via --set controller.adminPassword=... (not committed)
+  admin:
+    username: "admin"
+    # password provided at install via --set controller.admin.password=... (not committed)
   serviceType: LoadBalancer
   installLatestPlugins: true
+  # NOTE: configuration-as-code, git, workflow-aggregator are already in the chart defaults.
   additionalPlugins:
-    - configuration-as-code
-    - git
-    - workflow-aggregator
     - workflow-job
     - pipeline-stage-view
     - docker-workflow
