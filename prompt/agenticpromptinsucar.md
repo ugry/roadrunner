@@ -29,18 +29,18 @@ Two concentric scopes; build the inner one first, but architect for the outer on
    elevated privileges to stand up the pipeline and seed initial secrets. This must be logged,
    time-bound, and REVOKED immediately afterward, and recorded to the prod-access ledger.
 
-## Hero demo scenario (live-first; mock fallback allowed if a live number is not yet provisioned)
-Caller dials a live Amazon Connect number (or the mock telephony adapter) -> multilingual
-emergency greeting (EN+FR to start) + Amazon Lex spoken intake ("my car won't start" / accident
-/ driver ill) -> "press 0 or say 'agent'" available at EVERY menu node -> safety short-circuit
-("if injured, call 112", with warm-transfer path) -> background ANI->policy lookup -> severity
-routing (Tier-0 life-safety > Tier-1 covered incident > Tier-2 coverage-unclear) -> operator
-softphone -> operator screen POPS pre-filled (caller, policy, vehicle, incident, location,
-priority) -> operator confirms coverage -> dispatches nearest tow via provider connector (mock
-returns simulated ETA/status) -> live ETA map -> customer receives SMS status link (real Pinpoint
-or logged mock) WITH the assigned tow driver's name/plate/photo for trust -> case resolved ->
-all events visible in Grafana (auth/system/error logs separated). If the call drops, the system
-auto-initiates an outbound callback and the case survives reconnection.
+## Hero demo scenario (live, no mocks)
+Caller dials a LIVE Amazon Connect number -> multilingual emergency greeting (EN+FR to start) +
+Amazon Lex spoken intake ("my car won't start" / accident / driver ill) -> "press 0 or say 'agent'"
+available at EVERY menu node -> safety short-circuit ("if injured, call 112", with warm-transfer
+path) -> background ANI->policy lookup -> severity routing (Tier-0 life-safety > Tier-1 covered
+incident > Tier-2 coverage-unclear) -> operator softphone -> operator screen POPS pre-filled
+(caller, policy, vehicle, incident, location, priority) -> operator confirms coverage -> dispatches
+nearest tow via a REAL provider connector (real provider sandbox/API returning real status/ETA)
+-> live ETA map -> customer receives a REAL SMS status link (Amazon Pinpoint) WITH the assigned tow
+driver's name/plate/photo for trust -> case resolved -> all events visible in Grafana
+(auth/system/error logs separated). If the call drops, the system auto-initiates an outbound
+callback and the case survives reconnection. NO MOCKS in any layer of the delivered prototype.
 
 ## Tech stack
 - Backend core: Go (services: case/incident, dispatch/matching[PostGIS], provider-integration,
@@ -54,8 +54,8 @@ auto-initiates an outbound callback and the case survives reconnection.
   ES, PT, NL, DA, FI(+SV), NO — Europcar's 16 corporate-country footprint). WCAG 2.1 AA.
 - Data: PostgreSQL + PostGIS, Redis; NATS JetStream (Kafka option) for async/events.
 - Telephony: Amazon Connect (contact flows, Lex, CCP softphone via Streams API, contact-attribute
-  screen-pop) behind a telephony-adapter so a MOCK adapter can drive the console locally and so
-  Connect stays swappable. Multi-region for DR (see Reliability).
+  screen-pop) behind a telephony-adapter so Connect stays swappable/portable. LIVE Connect only —
+  no mock adapter in the delivered prototype. Multi-region for DR (see High Availability).
 - Auth: Keycloak brokering OIDC, OAuth2, SAML/SSO, Kerberos (SPNEGO), Windows domain/AD (LDAP).
   RBAC roles: operator, supervisor, admin, ops, product_owner.
 - Platform: Kubernetes; Terraform (all resources as IaC). CD tool is SPINNAKER (MANDATORY) —
@@ -68,8 +68,9 @@ auto-initiates an outbound callback and the case survives reconnection.
   so provisioning Spinnaker is an explicit, budgeted build step.
 - Observability: Prometheus + Loki + Grafana + Alertmanager; OpenTelemetry traces/metrics; on-call
   paging (PagerDuty/Opsgenie).
-- Primary cloud AWS; everything except Connect is containerized + IaC-portable. FULL PHASE-1
-  delivers a WARM-STANDBY second cloud (active-passive) — not just "possible".
+- Primary cloud AWS; everything except Connect is containerized + IaC-portable. WITHIN a region the
+  cluster is ACTIVE-ACTIVE with automatic node-failover (see High Availability). FULL PHASE-1 adds a
+  cross-cloud WARM-STANDBY (active-passive) second cloud — not just "possible".
 
 ## Environments (3 tiers, SEPARATE AWS ACCOUNTS, strict isolation)
 - dev -> UAT -> production, each in its OWN AWS account (Organizations); separate IAM, RBAC,
@@ -150,6 +151,35 @@ Case 3 — Production (groups `insucar-devops-prod-readonly` and `insucar-prod-b
   standby) with failover DIDs so the emergency line cannot go fully dark.
 - SLOs/error budgets with Alertmanager paging; manual-failover default, per-service failover policy.
 
+## High Availability & node-failure resilience (NO single point of failure)
+Requirement: if ANY one node fails, another node takes over automatically with no data loss and no
+manual intervention. This is achievable — but a naive "2 equal nodes" design CANNOT do it safely,
+and that specific pitfall must be engineered out:
+- THE 2-NODE QUORUM TRAP: consensus/stateful systems (Postgres auto-failover via Patroni+etcd,
+  NATS JetStream, Redis Sentinel) need a MAJORITY to elect a new leader. With exactly two equal
+  members, losing one leaves 1 of 2 = no majority -> the survivor will NOT safely promote, or worse,
+  both act as primary (SPLIT-BRAIN, data corruption). So "2 nodes, one takes over" is exactly the
+  design defect to avoid.
+- THE FIX (mandatory): quorum must survive a single-node loss. Use an ODD member count for every
+  consensus layer -> minimum THREE members, or TWO data nodes PLUS a lightweight WITNESS/arbiter,
+  spread across THREE failure domains (AZs). Then losing any one node keeps a 2/3 majority and
+  failover is automatic and safe. Applied per layer:
+  - Kubernetes control plane: 3 control-plane nodes (or managed EKS control plane) across 3 AZs.
+  - Postgres: Patroni with a 3-member etcd/consensus (2 data + witness), synchronous replication,
+    automatic leader election; a floating/service endpoint so clients follow the new primary.
+  - NATS JetStream: 3-node cluster, R3 streams (raft quorum).
+  - Redis: Sentinel/cluster with 3 voting members.
+  - Stateless Go/Rust services + BFF + console: >=2 replicas (>=3 recommended) with
+    podAntiAffinity across nodes/AZs behind the LB (active-active); any replica loss is transparent.
+- WORKLOAD PLACEMENT: PodDisruptionBudgets, topologySpreadConstraints across AZs, anti-affinity so
+  no single node holds a whole tier; LB health-checks evict a dead node in seconds.
+- HONEST STATEMENT ON "2 NODES": deliver the compute as active-active, but the underlying HA cluster
+  MUST be effectively 3 (2 + witness) for stateful quorum. If the client hard-requires exactly two
+  physical nodes, place the witness/arbiter in a third small failure domain (separate AZ / tiny
+  instance / managed service) — do NOT ship a quorum-less 2-node stateful cluster.
+- MUST-PASS test: chaos-kill any single node during an active call+dispatch -> traffic continues,
+  Postgres auto-promotes < 30s, zero committed-data loss (RPO=0 on sync replication), case survives.
+
 ## Caller-resilience (emergency UX fixes)
 - Call-drop recovery: if the call drops (dead-zone), auto-initiate an outbound callback; the case
   persists and resumes on reconnection.
@@ -196,10 +226,12 @@ customer, case *—* provider_mission; reference data (make/model catalog).
 - Admin actions: add provider, paste/rotate key/secret (to vault), test-connection (sandbox),
   enable/disable, set priority. Inbound webhooks -> status normalizer -> canonical status -> case
   timeline.
-- v1: architecture + MANUAL dispatch + one working MOCK tow connector (simulated ETA/status) +
-  fallback chain. Real APIs referenced for later: AXA Roadside Missioning [OAuth2], Booking.com
-  Demand [hotel], CrashBay/Autorox [repair]; aggregators ARC Europe / Europ Assistance as
-  config-only adds. Operator click-to-dial + 3-way conference via CCP — same case timeline.
+- v1 (NO MOCKS): architecture + MANUAL dispatch + at least one REAL working tow connector against a
+  live provider sandbox/API (e.g. AXA Roadside Missioning [OAuth2] or Towpal [api_key + webhooks])
+  returning real status/ETA + fallback chain. Additional real APIs added by config: Booking.com
+  Demand [hotel], CrashBay/Autorox [repair]; aggregators ARC Europe / Europ Assistance. Operator
+  click-to-dial + 3-way conference via CCP — same case timeline. If a provider has no public API,
+  the manual click-to-dial + webhook status path is the real (non-mock) fallback.
 
 ## Telephony (Amazon Connect) build
 - Contact flow: EN/FR by DNIS + selectable; safety short-circuit + PSAP warm-transfer; Lex intent
@@ -209,8 +241,9 @@ customer, case *—* provider_mission; reference data (make/model catalog).
   { connect_contact_id, ani, dnis, language, cli_country, policy_number, authenticated,
     incident_type_ivr, safety_flag, location_link_status(+lat/lng), priority, queue,
     matched:{customer_id, policy_id, vehicle_id} }
-- Recordings -> encrypted S3 + GDPR retention; consent announced. Mock adapter: HTTP endpoint that
-  mimics Connect events so the console works without a real number.
+- Recordings -> encrypted S3 + GDPR retention; consent announced. LIVE Connect only; the
+  telephony-adapter boundary exists for portability/testing, but the delivered prototype uses a real
+  claimed number end-to-end (no mock adapter).
 
 ## Testing strategy (mandatory)
 - Unit + integration + contract tests (per provider adapter) + end-to-end (hero scenario) + load
@@ -244,52 +277,56 @@ customer, case *—* provider_mission; reference data (make/model catalog).
 - Rollback: red-black gives instant traffic cutback to the previous server group; keep N-1
   enabled for fast revert.
 
-## First working prototype (walking skeleton) — build this THIN PATH first
-Prove integration end-to-end before breadth. The first working prototype is the minimal vertical
-slice, MOCK-FIRST (no external accounts needed), runnable locally on k3d/minikube:
-1. Mock telephony adapter (HTTP endpoint emitting Connect-shaped events) -> a "Simulate incoming
-   call" button in the console is the default path; live Amazon Connect is a later enhancement.
-2. Screen-pop transport: mock adapter -> BFF -> operator console over a WebSocket channel
-   (define event names: `call.ringing`, `call.answered` with the screen-pop contract payload,
-   `dispatch.updated`). This transport must exist for BOTH mock and live paths.
-3. Seeded demo data (deterministic): >=3 customers each with policy + vehicle covering the demo
-   incident types (won't-start, accident, driver-ill); >=2 mock tow providers with
-   availability_calendar + performance_score; a demo operator, supervisor, and product_owner user.
-4. Mock tow connector + a simple ETA simulator: moves a point along a route toward the caller and
-   emits shrinking-ETA `dispatch.updated` events; map uses Leaflet + OpenStreetMap tiles (free) or
-   a keyed provider if supplied.
-5. Mock notification service: logs the tokenized status link (and driver name/plate/photo) to
-   system.log and a demo inbox view instead of sending real SMS.
-6. Keycloak realm seed: realm `insucar`, OIDC client for the console + BFF, seeded users/roles
-   (operator/supervisor/product_owner) so login works out of the box.
-7. Local secrets: dev uses a `.env` / sealed-secrets stub (NOT AWS Secrets Manager) so the
-   skeleton runs offline; the AWS Secrets Manager path activates in UAT/prod.
-8. One-command bootstrap: a `make dev-up` (or `taskfile`) that starts Postgres/PostGIS + Redis +
-   Keycloak + services + console on k3d, runs migrations, and loads seed data. Document env vars
-   and a `make demo-reset` to restore deterministic state for a repeatable demo.
-9. Smoke test that DEFINES "working": simulate a call -> assert screen-pop payload lands in the
-   console -> click dispatch -> assert ETA events flow -> assert status link logged -> assert
-   auth/system/error entries appear in Loki. This smoke test is the prototype's acceptance probe.
+## First working prototype (REAL vertical slice, HA from the start) — build this THIN PATH first
+Prove the REAL end-to-end path before breadth. No mocks. It runs on the real HA cluster (dev
+account) so node-failover is exercised from day one:
+1. LIVE telephony: real Amazon Connect number + contact flow + Lex; real CCP softphone in the
+   console. (The telephony-adapter boundary stays for portability, but the path is live.)
+2. Screen-pop transport: Connect Streams -> BFF -> operator console over a WebSocket channel
+   (event names: `call.ringing`, `call.answered` with the screen-pop payload, `dispatch.updated`).
+3. Real data (deterministic seed of REAL records, not fakes): >=3 customers each with policy +
+   vehicle covering the incident types (won't-start, accident, driver-ill); >=2 REAL providers
+   configured in the connector registry with availability_calendar + performance_score; real
+   operator, supervisor, and product_owner users in Keycloak.
+4. Real tow connector: dispatch through a live provider sandbox/API (AXA Roadside Missioning or
+   Towpal) returning real status/ETA; live ETA map uses Leaflet + OpenStreetMap (or a keyed provider
+   if supplied); provider location/ETA come from the provider's real webhooks.
+5. Real notifications: Amazon Pinpoint sends the tokenized status link + driver name/plate/photo.
+6. Keycloak realm seed: realm `insucar`, OIDC clients for console + BFF, seeded users/roles so SSO
+   works immediately.
+7. Secrets: AWS Secrets Manager from the start (no local secret stub); short-lived creds only.
+8. HA cluster + one-command bootstrap: `make dev-up` provisions the quorum HA cluster (3 members /
+   2+witness across AZs), Patroni Postgres, clustered NATS/Redis, runs migrations + real seed.
+   `make demo-reset` restores deterministic state for a repeatable demo.
+9. Acceptance probe (DEFINES "working"): place a REAL call -> screen-pop lands -> dispatch to a REAL
+   provider -> real ETA events flow -> real SMS link delivered -> auth/system/error in Loki. THEN
+   chaos-kill one node mid-call and assert the case + call continue and Postgres auto-promotes with
+   zero committed-data loss. Both must pass for the prototype to be "working".
 
 ## Prerequisites (supervisor's responsibility to confirm/provide BEFORE build)
-- AWS Organizations with (at least) dev/UAT/prod accounts; bootstrap admin for first setup only.
-- Amazon Connect instance + claimed number (or decision to use the mock adapter for the demo).
+- AWS Organizations with dev/UAT/prod accounts; bootstrap admin for first setup only; enough node
+  quota for a QUORUM HA cluster (3 members / 2 data + witness) across >=3 AZs per tier.
+- Amazon Connect instance + a CLAIMED LIVE phone number (required — no mock path).
+- At least one REAL provider sandbox/API credential (AXA Roadside Missioning or Towpal) for live
+  dispatch.
 - Domain (unysolar.com) with DNS access + TLS (ACM wildcard acceptable).
-- SMS: Pinpoint project (real SMS) OR acceptance of the logged mock notification service.
-- Map tiles / what3words: free-tier key or mock.
+- SMS: Amazon Pinpoint project (required — real SMS, no logged-mock fallback).
+- Map tiles / what3words: real key (or use free OpenStreetMap tiles).
 - Confirm: fresh least-privilege AWS credentials (never a previously exposed key); teardown scope
   (whole account vs tagged-only) if any teardown is requested; EN+FR demo languages.
 
 ## Deliverables (demo slice)
 1. React operator console (screen-pop, case mgmt, coverage, dispatch, live ETA, EN+FR, WCAG,
    dedup/manual-create, SLA timers, driver-trust display).
-2. Amazon Connect emergency IVR (or mock adapter): Lex, agent-everywhere, safety + PSAP transfer,
-   severity routing, call-drop callback.
-3. Provider integration layer + admin connector registry + mock tow connector + fallback chain.
-4. Go backend services + Go BFF (generated TS types) + seeded Postgres/PostGIS (with relationships).
+2. LIVE Amazon Connect emergency IVR: Lex, agent-everywhere, safety + PSAP transfer, severity
+   routing, call-drop callback.
+3. Provider integration layer + admin connector registry + at least one REAL tow connector
+   (live sandbox/API) + fallback chain.
+4. Go backend services + Go BFF (generated TS types) + real-seeded Postgres/PostGIS (relationships).
 5. Rust inner-core vault (KMS envelope encryption + SHA-256-chained audit ledger, network-isolated).
 6. Keycloak SSO (OIDC/OAuth/SAML/Kerberos/AD) with RBAC incl. product_owner.
-7. Live ETA map + tokenized customer SMS status link (real or mock).
+7. Live ETA map + tokenized customer SMS status link via Amazon Pinpoint (real).
+7b. Quorum HA cluster (3 members / 2+witness across >=3 AZs) with automatic node-failover proven.
 8. Grafana: separated auth/system/error logs + call/dispatch business KPIs (time-to-dispatch,
    time-to-arrival, dispatch-success, abandonment, FCR).
 9. IaC repo (3 separate accounts) + Spinnaker pipelines (dev/UAT + prod-gated) with manual judgment
@@ -301,30 +338,32 @@ slice, MOCK-FIRST (no external accounts needed), runnable locally on k3d/minikub
 ## Build order
 0. (Ops) Confirm prerequisites + fresh least-privilege creds. If teardown requested: inventory all
    regions -> supervisor approval -> scoped teardown. NEVER use exposed keys; log every deletion.
-1. Repo scaffold + local dev (k3d/minikube) + CI + Terraform (dev account) + `make dev-up`
-   one-command bootstrap. (Spinnaker stood up in step 10; local iteration uses Helm/kubectl.)
-2. WALKING SKELETON (mock-first vertical slice): mock telephony adapter + WebSocket screen-pop
-   transport + seeded demo data + Keycloak realm seed + mock tow connector + ETA simulator + mock
-   notification. Make the prototype SMOKE TEST green (simulate call -> screen-pop -> dispatch ->
-   ETA -> status link -> logs in Loki). This is the first working prototype.
-3. Postgres/PostGIS relationships hardened + console shell fleshed out.
+1. Repo scaffold + CI + Terraform (dev account) + QUORUM HA cluster (3 members / 2+witness across
+   >=3 AZs) + `make dev-up` one-command bootstrap on the real cluster. (Spinnaker stood up step 10.)
+2. REAL VERTICAL SLICE (no mocks): live Connect number + contact flow + Lex; Streams->BFF->console
+   WebSocket screen-pop; real-seeded Postgres (Patroni) + Keycloak realm; one real tow connector;
+   Pinpoint SMS. Make the acceptance probe green (real call -> screen-pop -> real dispatch -> real
+   ETA -> real SMS -> logs in Loki) AND the node-kill failover test pass. This is the first working
+   prototype.
+3. Postgres/PostGIS relationships hardened + console fleshed out.
 4. Go core services + Go BFF (+ generated TS types).
 5. Rust inner-core vault (KMS + SHA-256 chained ledger, NetworkPolicy-isolated).
-6. Provider connector layer + fallback chain + admin key-in-vault (real-connector interface).
+6. Provider connector layer + fallback chain + admin key-in-vault (add more real connectors).
 7. Live ETA map + tokenized SMS status link + driver-trust display.
-8. Telephony: real Connect contact flow + Lex + softphone + screen-pop + call-drop callback + PSAP
-   transfer (swap the mock adapter for live, same transport).
+8. Telephony hardening: PSAP warm-transfer + call-drop outbound callback + multi-region Connect DR.
 9. IAM 3-case groups + JIT break-glass + prod-access blockchain ledger + product-owner approval.
 10. Stand up SPINNAKER (Halyard/Operator) + register dev/UAT/prod accounts + pipelines with manual
     judgment gates; separated logging -> Loki + Grafana (logs + business KPIs); UAT account +
-    promotion via Spinnaker manual gate; backup/restore + telephony-DR runbooks; testing suite green.
-11. Demo script + architecture one-pager; full hero-scenario rehearsal (incl. call-drop recovery).
+    promotion via Spinnaker manual gate; backup/restore + telephony-DR + node-failover runbooks.
+11. Demo script + architecture one-pager; full hero-scenario rehearsal (incl. call-drop + node-kill).
 
 ## Acceptance criteria
-- Hero scenario runs live end-to-end (live Connect number or mock adapter); screen-pop pre-fills;
-  no re-keying; a dropped call auto-recovers via callback.
-- Dispatch fires through the connector with fallback; ETA updates; customer gets a tokenized status
-  link showing the tow driver's identity.
+- Hero scenario runs LIVE end-to-end on a real Connect number (NO mocks anywhere); screen-pop
+  pre-fills; no re-keying; a dropped call auto-recovers via outbound callback.
+- Dispatch fires through a REAL provider connector with fallback; real ETA updates; customer gets a
+  tokenized Pinpoint SMS status link showing the tow driver's identity.
+- NODE-FAILOVER PROVEN: killing any single node mid-call keeps traffic + case alive and Postgres
+  auto-promotes < 30s with zero committed-data loss (no split-brain, quorum maintained).
 - SSO via Keycloak works; RBAC enforced; the 3-case IAM model holds (dev cannot touch UAT/prod;
   UAT is read-biased pre-prod; prod is read-only until a product-owner-approved, time-bound grant).
 - Every production access grant appears in the immutable blockchain ledger (who/when/why/approver)
@@ -332,8 +371,9 @@ slice, MOCK-FIRST (no external accounts needed), runnable locally on k3d/minikub
 - auth/system/error logs separated in Grafana; Rust vault network-isolated; business KPIs visible.
 - All infra is IaC across 3 accounts; UAT->prod promotion works via a Spinnaker manual judgment
   stage; no secrets in code/logs; SBOM + signed images produced.
-- Testing suite passes; the walking-skeleton smoke test is green and `make demo-reset` restores a
-  repeatable demo; backup/restore and telephony-DR runbooks demonstrated.
+- Testing suite passes; the real-vertical-slice acceptance probe is green, the node-kill failover
+  test passes, and `make demo-reset` restores a repeatable demo; backup/restore, telephony-DR, and
+  node-failover runbooks demonstrated.
 
 ## Guardrails
 - Read/inspect before modifying. No destructive action without approval + inventory (except
