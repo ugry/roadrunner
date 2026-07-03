@@ -87,3 +87,13 @@ Last updated: 2026-07-03
 - Namespace: insucar (Deployment insucar-api x2 + Postgres with schema+seed)
 - ECR image: 326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:1
 - Spinnaker app/pipeline: insucar / deploy-insucar-api (deployManifest, account insucar-eks)
+
+## Quick access — GUIs & endpoints (updated 2026-07-03)
+- Jenkins UI:      http://a69a0dc446e674657ac3fae06d8dd559-1651454478.eu-west-1.elb.amazonaws.com:8080          (admin / InsucarAdmin!2026)
+- Spinnaker Deck:  http://a4977860e39434f278d0b4dedbcd4bb5-449340997.eu-west-1.elb.amazonaws.com              (no login; app "insucar")
+- Spinnaker Gate:  http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com              (API only)
+- App PROD (gated pipeline): http://ad4de17a313444704a74f62919bfabc7-1055718284.eu-west-1.elb.amazonaws.com/
+- App (first Spinnaker deploy, ns insucar):  http://af9269372141a4fdba7953b3679d6189-59590199.eu-west-1.elb.amazonaws.com/
+- Prototype EC2 app: http://app.unysolar.com:8080/  (hidden operator: /ops-console-7f3a9c)
+- kubeconfig: aws eks update-kubeconfig --name insucar --region eu-west-1
+- Spinnaker webhook (Jenkins->deploy): http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com/webhooks/webhook/insucar-ci
