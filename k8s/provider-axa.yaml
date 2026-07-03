@@ -1,0 +1,23 @@
+# Real HTTP provider endpoint (stand-in for AXA/Towpal). The insucar-api provider connector
+# calls this over the network (PROVIDER_API_URL). Swap the URL + creds for the real vendor.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: provider-axa, namespace: insucar, labels: { app: provider-axa } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: provider-axa } }
+  template:
+    metadata: { labels: { app: provider-axa } }
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0.0
+          args: ["-listen=:5678","-text={\"mission_id\":\"AXA-PROV-1001\",\"eta_minutes\":22,\"status\":\"accepted\"}"]
+          ports: [ { containerPort: 5678 } ]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: provider-axa, namespace: insucar }
+spec:
+  selector: { app: provider-axa }
+  ports: [ { port: 5678, targetPort: 5678 } ]

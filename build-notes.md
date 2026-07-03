@@ -17,3 +17,15 @@ Decisions taken by the product owner for this build phase:
 - TESTING (#15): unit/integration + smoke tests wired into CI — important, include now.
 
 Action: apply the v3 prompt from this baseline; (re)start the first prototype with the above.
+
+## Executed (2026-07-03, this session)
+- Autoscaling: HPA on insucar-api (cpu 60%, 2->6 pods) + Cluster Autoscaler (nodes 2->5,
+  IRSA InsucarClusterAutoscaler). Nodegroup min2/max5. 2-node HA confirmed.
+- Backend v2 (image :2): MOCK Amazon Connect adapter (/api/telephony/mock/incoming),
+  REAL provider connector (PROVIDER_API_URL -> provider-axa svc; dispatch shows provider_source=api),
+  REAL SMS via AWS SNS (node role granted AmazonSNSFullAccess; dispatch shows sms=sent).
+  Unit tests run in the image build (go vet + go test).
+- Full Spinnaker pipeline (#14) PROVEN: Deploy DEV -> manual judgment -> Deploy UAT ->
+  product-owner judgment -> Deploy PROD (all SUCCEEDED). Deployed to insucar-dev/uat/prod.
+- PROD app (deployed by the gated pipeline): http://ad4de17a313444704a74f62919bfabc7-1055718284.eu-west-1.elb.amazonaws.com/
+  Verified: mock-connect screen-pop, real provider call (eta 22 from provider), SMS sent.
