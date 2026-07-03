@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Insucar Operator Console</title>
+<style>
+ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#101820;color:#e8eef2}
+ header{background:#1b2733;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0a7d5a}
+ .grid{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px}
+ .card{background:#17222e;border:1px solid #26333f;border-radius:10px;padding:14px;margin-bottom:14px}
+ .card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#8fb0a5}
+ .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700}
+ .prio-emergency{background:#c0392b} .prio-high{background:#e67e22} .ok{background:#0a7d5a}
+ input,button{padding:9px;border-radius:8px;border:1px solid #33434f;background:#0f1a24;color:#e8eef2}
+ button{background:#0a7d5a;border:0;cursor:pointer;font-weight:600}
+ .kv{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;border-bottom:1px dashed #2a3742}
+ .safety{background:#3a1414;border-color:#7a2d2d}
+ #eta{font-size:26px;font-weight:800;color:#5ad19b}
+ .muted{color:#7d94a1;font-size:12px}
+</style>
+</head>
+<body data-app="operator">
+<header><strong>Insucar · Operator Console</strong><span id="agent">Agent: Amelie Durand · 🟢 Available</span></header>
+<div class="grid">
+  <div>
+    <div class="card">
+      <h3>Softphone / Incoming call</h3>
+      <div class="muted">Simulated call trigger (production = live Amazon Connect screen-pop)</div>
+      <input id="phone" value="+33600000001" style="width:100%;margin-top:8px">
+      <button style="width:100%;margin-top:8px" onclick="incoming()">📞 Answer incoming call</button>
+    </div>
+    <div class="card safety">
+      <h3>Safety triage (ask first)</h3>
+      <div class="kv"><span>Everyone safe?</span><span id="safe">—</span></div>
+      <div class="kv"><span>Injuries / medical?</span><span id="inj">—</span></div>
+      <button style="width:100%;margin-top:8px;background:#c0392b" onclick="document.getElementById('psap').textContent='↪ Warm-transferring to 112/PSAP…'">↪ Transfer to 112 (Tier-0)</button>
+      <div id="psap" class="muted" style="margin-top:6px"></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h3>Screen-pop — caller identity</h3>
+      <div style="margin-bottom:8px"><span id="prio" class="pill">no active call</span></div>
+      <div class="kv"><span>Customer</span><span id="cust">—</span></div>
+      <div class="kv"><span>Language</span><span id="lang">—</span></div>
+      <div class="kv"><span>Policy</span><span id="pol">—</span></div>
+      <div class="kv"><span>Coverage</span><span id="cov">—</span></div>
+      <div class="kv"><span>Vehicle</span><span id="veh">—</span></div>
+    </div>
+    <div class="card">
+      <h3>Coverage &amp; dispatch</h3>
+      <div class="kv"><span>Covered by policy</span><span id="covered">—</span></div>
+      <button id="dispatchBtn" style="margin-top:10px" disabled onclick="dispatch()">🚚 Dispatch nearest tow</button>
+      <div class="kv" style="margin-top:10px"><span>Provider</span><span id="prov">—</span></div>
+      <div class="kv"><span>Assigned driver</span><span id="driver">—</span></div>
+      <div style="margin-top:8px">ETA <span id="eta">—</span> <span class="muted">min</span></div>
+      <div id="link" class="muted" style="margin-top:8px"></div>
+    </div>
+    <div class="card"><h3>Case timeline</h3><div id="log" class="muted">No active case.</div></div>
+  </div>
+</div>
+<script>
+let caseId=null;
+async function incoming(){
+  const phone=document.getElementById('phone').value;
+  logline('📞 Incoming call from '+phone+' — looking up…');
+  const r=await fetch('/api/lookup?phone='+encodeURIComponent(phone));
+  const j=await r.json();
+  if(!j.matched){ setPrio('unknown caller','prio-high'); document.getElementById('cust').textContent='Unknown — manual create'; return; }
+  document.getElementById('cust').textContent=j.customer.first_name+' '+j.customer.last_name+' ('+j.customer.country+')';
+  document.getElementById('lang').textContent=j.customer.language;
+  document.getElementById('pol').textContent=j.policy.policy_number;
+  document.getElementById('cov').textContent=j.policy.coverage+' / '+j.policy.status;
+  document.getElementById('veh').textContent=j.vehicle.make+' '+j.vehicle.model+' · '+j.vehicle.plate+' ('+j.vehicle.fuel+')';
+  const covered = j.policy.status==='active';
+  document.getElementById('covered').innerHTML = covered?'<span class="pill ok">YES</span>':'<span class="pill prio-high">CHECK</span>';
+  setPrio('HIGH — breakdown','prio-high');
+  document.getElementById('safe').textContent='asking…'; document.getElementById('inj').textContent='asking…';
+  // create the case (real)
+  const cr=await fetch('/api/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customerID:j.customer.id,incident:'breakdown',priority:'high'})});
+  const cj=await cr.json(); caseId=cj.case_id;
+  logline('🗂 Case '+cj.case_number+' created (status '+cj.status+').');
+  document.getElementById('dispatchBtn').disabled=false;
+}
+async function dispatch(){
+  if(!caseId)return;
+  const r=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caseID:caseId,service:'tow_recovery'})});
+  const j=await r.json();
+  document.getElementById('prov').textContent=j.provider;
+  document.getElementById('driver').textContent=j.driver.name+' · '+j.driver.plate;
+  document.getElementById('eta').textContent=j.eta_minutes;
+  document.getElementById('link').textContent='✅ Tokenized status link + driver ID sent to customer (Pinpoint SMS in prod).';
+  logline('🚚 Dispatched '+j.provider+' — ETA '+j.eta_minutes+' min.');
+}
+function setPrio(t,c){const e=document.getElementById('prio');e.textContent=t;e.className='pill '+c;}
+function logline(t){const l=document.getElementById('log'); if(l.textContent==='No active case.')l.textContent=''; l.textContent += (new Date().toLocaleTimeString()+'  '+t+'\n');}
+</script>
+</body>
+</html>

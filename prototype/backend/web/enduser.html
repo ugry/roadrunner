@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="index,follow">
+<title>Insucar — Roadside Assistance | Account</title>
+<style>
+ :root{--brand:#0a7d5a}
+ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f7f6;color:#123}
+ header{background:var(--brand);color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
+ .wrap{max-width:520px;margin:32px auto;background:#fff;padding:24px;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+ h1{font-size:20px} label{display:block;margin:10px 0 4px;font-size:14px}
+ input,select{width:100%;padding:10px;border:1px solid #cbd5d0;border-radius:8px;box-sizing:border-box}
+ .row{display:flex;gap:10px} .row>div{flex:1}
+ .consent{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px}
+ button{margin-top:16px;width:100%;background:var(--brand);color:#fff;border:0;padding:12px;border-radius:8px;font-size:15px;cursor:pointer}
+ .emergency{background:#c0392b;margin-top:8px}
+ #out{margin-top:14px;font-size:14px;white-space:pre-wrap}
+ .tab{cursor:pointer;padding:8px 14px;border-radius:8px 8px 0 0;background:#e3ebe8;display:inline-block}
+ .tab.active{background:#fff;font-weight:600}
+</style>
+</head>
+<body data-app="enduser">
+<header><strong>Insucar</strong><span>Emergency roadside assistance</span></header>
+<div class="wrap">
+  <span class="tab active" id="tab">Create your account</span>
+  <h1 id="title">Register</h1>
+  <p style="font-size:13px;color:#456">Register so that when you break down we already know you, your car and your cover — no re-explaining under stress.</p>
+  <div class="row"><div><label>First name</label><input id="first" value="Test"></div><div><label>Last name</label><input id="last" value="Driver"></div></div>
+  <label>Email</label><input id="email" type="email" placeholder="you@example.com">
+  <div class="row">
+    <div><label>Country</label><select id="country"><option>FR</option><option>GB</option><option>DE</option></select></div>
+    <div><label>Mobile (E.164)</label><input id="phone" placeholder="+33600000009"></div>
+  </div>
+  <label>Preferred language</label><select id="language"><option value="en">English</option><option value="fr">Français</option><option value="de">Deutsch</option></select>
+  <label>Password</label><input id="password" type="password" placeholder="••••••••">
+  <div class="consent"><input type="checkbox" id="c_terms" checked><label for="c_terms" style="margin:0">I accept the Terms &amp; Privacy Policy</label></div>
+  <div class="consent"><input type="checkbox" id="c_rec" checked><label for="c_rec" style="margin:0">I consent to call recording (for my safety &amp; claims)</label></div>
+  <button id="submit">Create account</button>
+  <button class="emergency" id="help">🚨 I need help now</button>
+  <div id="out"></div>
+</div>
+<script>
+document.getElementById('submit').onclick = async () => {
+  const body = {
+    email: v('email'), phone: v('phone'), first: v('first'), last: v('last'),
+    language: v('language'), country: v('country'),
+    consents: [ ...(c('c_terms')?['terms','privacy']:[]), ...(c('c_rec')?['call_recording']:[]) ]
+  };
+  const r = await fetch('/api/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j = await r.json();
+  document.getElementById('out').textContent = r.ok ? '✅ Registered. Customer ID: '+j.customer_id : '⚠️ '+(j.error||'error');
+};
+document.getElementById('help').onclick = () => { document.getElementById('out').textContent='Calling assistance… (in production this dials the live Amazon Connect number)'; };
+function v(id){return document.getElementById(id).value;}
+function c(id){return document.getElementById(id).checked;}
+</script>
+</body>
+</html>
