@@ -29,3 +29,12 @@ Action: apply the v3 prompt from this baseline; (re)start the first prototype wi
   product-owner judgment -> Deploy PROD (all SUCCEEDED). Deployed to insucar-dev/uat/prod.
 - PROD app (deployed by the gated pipeline): http://ad4de17a313444704a74f62919bfabc7-1055718284.eu-west-1.elb.amazonaws.com/
   Verified: mock-connect screen-pop, real provider call (eta 22 from provider), SMS sent.
+
+## Jenkins -> Spinnaker webhook (git push -> deploy) — PROVEN
+- Spinnaker pipeline got a webhook trigger (source: insucar-ci).
+- Jenkinsfile: Kubernetes agent -> Kaniko builds+pushes image to ECR (no Docker daemon) ->
+  wget POST to Spinnaker webhook. Node role granted ECR PowerUser for Kaniko push.
+- Jenkins job insucar-ci build #3 SUCCESS (checkout -> Kaniko build+push -> trigger Spinnaker).
+- Spinnaker executed a webhook-triggered run: Deploy DEV -> (judgment) -> UAT -> (product-owner
+  judgment) -> PROD, all SUCCEEDED. Full CI/CD chain functional.
+Trigger URL: http://<gate-lb>/webhooks/webhook/insucar-ci
