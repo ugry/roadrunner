@@ -38,3 +38,18 @@ Action: apply the v3 prompt from this baseline; (re)start the first prototype wi
 - Spinnaker executed a webhook-triggered run: Deploy DEV -> (judgment) -> UAT -> (product-owner
   judgment) -> PROD, all SUCCEEDED. Full CI/CD chain functional.
 Trigger URL: http://<gate-lb>/webhooks/webhook/insucar-ci
+
+## Session 2026-07-03 (evening) — decisions & config changes
+- Design systems chosen via Open Design: operator = "mission-control" (dark, CAD-style),
+  landing/user = "stripe" (light, premium, golden-ratio/Fibonacci). Distinct on purpose.
+- Domain model: users on unysolar.com (+www, +app), operators on op.unysolar.com. Host-based routing
+  in the Go backend (op.* -> operator.html; apex -> landing.html at "/", enduser.html at /app,/login,/register).
+- TLS: Let's Encrypt via cert-manager + ingress-nginx (HTTP-01). 443 only (80 = 308 redirect + ACME).
+  If port 80 must be fully closed later -> switch to DNS-01 (Route53) and drop the :80 listener.
+- Brand tokens (light): green #0a7d5a, green-dark #086a4d, navy #0b1f2a, amber #f5a623, bg #f4f8f6,
+  line #e3ece8, font Inter. Operator console body stays dark (ops density); its LOGIN is light-branded.
+- Auth remains demo-grade (SHA-256 + shared SESSION_SECRET env). Keycloak/MFA still the planned upgrade.
+- Image build: golang:1.24-alpine (aws-sdk-go-v2 needs >=1.24); tests run in build (go vet + go test).
+- Deploy method this session: kubectl set image (fast). Spinnaker gated pipeline still available for
+  formal promotion (spinnaker/pipelines/insucar-deploy.json). Image tags used: auth, domains, landing,
+  brandlogin, toprightauth, casecards (current = casecards).

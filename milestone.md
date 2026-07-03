@@ -72,3 +72,36 @@ Last updated: 2026-07-03
 - Spinnaker application 'insucar' + pipeline 'deploy-insucar-api' (deployManifest) created and RUN:
   status SUCCEEDED. App deployed to EKS (2/2 pods), LoadBalancer serving.
 - App on EKS (deployed by Spinnaker): http://af9269372141a4fdba7953b3679d6189-59590199.eu-west-1.elb.amazonaws.com/  (healthz OK; /api/lookup returns real data)
+
+## Session 2026-07-03 (evening) — GUIs, domains, TLS, brand
+Done:
+- Auth prototype: app-level sessions (HMAC cookie); users log in by email, agents by agent_id.
+  Seeded real-like users (customers + agents OP-1001/SUP-2001/PO-3001). Protected /api/user/* and
+  /api/agent/*; verified via API + headless (login as user AND agent).
+- Terraform IaC added (terraform/): VPC 3AZ + EKS + nodegroup autoscale + IRSA + ECR + S3.
+- Open Design GUIs generated:
+  * Operator console (design system "mission-control", dark) -> design/operator-console.html.
+  * Marketing landing (design system "stripe", light, golden-ratio/Fibonacci) -> design/landing.html.
+- Wired GUIs to live backend and split by HOST:
+  * unysolar.com + www  -> marketing landing ("/"), functional user app at "/app".
+  * op.unysolar.com      -> operator console (login -> live queue -> screen-pop -> dispatch).
+  Backend handleRoot routes by Host (op.* vs apex).
+- HTTPS/443 via Let's Encrypt: ingress-nginx + cert-manager (ClusterIssuer letsencrypt-prod, HTTP-01),
+  cert insucar-tls covers unysolar.com/www/app/op. Port 80 -> 308 redirect. insucar-api svc -> ClusterIP;
+  Route53 alias records point all hosts to the ingress-nginx ELB.
+- Fixed www.unysolar.com (was an OLD record aliasing to the separate "Unysol" ALB in eu-central-1) ->
+  repointed to Insucar ingress + added www to TLS SAN.
+- Niche logo (golden ratio): shield + perspective road + amber arriving pin + Insu(navy)car(green)
+  wordmark. design/insucar-logo.svg + insucar-mark.svg.
+- Brand consistency: operator LOGIN restyled to match end-user brand (light green/navy/amber + shield);
+  end-user /app restyled to same light brand.
+- UX fixes: Log in/Log out moved to top-right bar (end-user); customer "My cases" changed from an
+  overflowing table to a responsive wrapping card layout (readable on desktop + mobile).
+
+Failures/fixes this session:
+- Jenkinsfile: timestamps() option needed Timestamper plugin -> removed. curlimages/curl "process
+  never started" -> switched webhook step to alpine+wget. Kaniko cache repo missing -> dropped --cache.
+- go get needed Go >=1.24 for aws-sdk-go-v2 -> bumped build image to golang:1.24-alpine.
+- Transient docker build go-get network hiccup -> retried (cache made it pass).
+
+Live now: image tag insucar-api:casecards (deployed to ns insucar). HTTPS on all hosts.

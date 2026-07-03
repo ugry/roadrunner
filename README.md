@@ -7,6 +7,11 @@
 > This README is the entry point. For deeper context read, in order:
 > `CONTINUE-HERE.md` (handoff), `build-notes.md` (decisions), `milestone.md` (history),
 > `access.md` (all live URLs + credentials), `prompt/agenticpromptinsucar.md` (the master spec).
+>
+> **LIVE (HTTPS / Let's Encrypt):** users at **https://unysolar.com/** (landing) and
+> **/app** (login); operators at **https://op.unysolar.com/**. Logins in `access.md`.
+> Runs on EKS (ns `insucar`, image `insucar-api:casecards`); TLS via ingress-nginx + cert-manager;
+> host-based routing (op.* = operators, apex = users). CI/CD: Jenkins → ECR → Spinnaker (gated).
 
 ---
 

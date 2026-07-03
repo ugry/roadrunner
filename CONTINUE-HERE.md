@@ -3,15 +3,32 @@
 Purpose: everything an agent needs to resume this project without re-discovery.
 Repo: https://github.com/ugry/insucar (private) · cloned locally at /tmp/insucar
 AWS: account 326804802908, region eu-west-1 · Domain: unysolar.com (Route53 zone Z06143773JJ0DPRILPDA0)
-Last updated: 2026-07-03
+Last updated: 2026-07-03 (evening)
 
-## TL;DR current state
-- Design + prompt: prompt/agenticpromptinsucar.md (v2, gap-hardened, no-mocks, quorum HA, Spinnaker,
-  registration, separate hidden operator app). Diagram: prompt/insucar-architecture.{mmd,svg,pdf(A2/A3)}.
-- DB: db/schema.sql + db/seed.sql (validated on postgis 15-3.4).
-- Prototype (Go API + PostGIS + end-user app + hidden operator console): prototype/.
-- Prototype deployed on a standalone EC2 (i-0628af42823122bce) at http://app.unysolar.com:8080
-- Full CI/CD on EKS PROVEN end-to-end: ECR image -> Spinnaker deployManifest -> app on EKS.
+## TL;DR current state (LIVE)
+- LIVE over HTTPS (Let's Encrypt):
+  * https://unysolar.com/  (+www) -> premium marketing landing (OD "stripe", golden-ratio); logo shield.
+  * https://unysolar.com/app       -> functional user app: login/register -> request assistance -> my cases.
+  * https://op.unysolar.com/        -> operator console: agent login -> live queue -> screen-pop -> dispatch.
+- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:casecards.
+- Auth (demo): users by EMAIL, agents by AGENT_ID (HMAC cookie sessions). Creds in access.md.
+  Users: claire.martin@example.fr / Claire#2026 (+john,+lukas). Agents: OP-1001/Operator#2026 (+SUP-2001,PO-3001).
+- Backend: single Go service prototype/backend/main.go; endpoints /api/user/*, /api/agent/*,
+  /api/register, /api/telephony/mock/incoming. Host-based routing (op.* vs apex) in handleRoot.
+- Mock Amazon Connect; REAL provider connector (provider-axa svc); REAL SMS via SNS.
+- TLS: ingress-nginx + cert-manager (ClusterIssuer letsencrypt-prod, cert insucar-tls). 80->443 redirect.
+  insucar-api svc = ClusterIP; Route53 alias (unysolar/www/app/op) -> ingress ELB.
+- CI/CD on EKS PROVEN: git push -> Jenkins(Kaniko->ECR) -> Spinnaker webhook -> gated dev/UAT/prod.
+- Design + prompt: prompt/agenticpromptinsucar.md (v3 Redion-parity). Diagrams: prompt/*.svg|pdf,
+  mermaidschemas/{current-deployed,planned-design}.svg. Terraform IaC: terraform/.
+- DB: db/schema.sql + seed.sql + schema-v3-additions(tenants/RLS) + schema-v4-auth + seed-users.
+- Brand: green #0a7d5a / navy #0b1f2a / amber #f5a623 / Inter. Logo: design/insucar-logo.svg + mark.
+- OLDER standalone prototype EC2 (i-0628af42823122bce) still exists (docker-compose) — superseded by EKS.
+
+## Redeploy the app (fast path)
+1. edit prototype/backend/* ; 2. docker build+push $ECR/insucar-api:<tag> (ECR login first);
+3. kubectl -n insucar set image deployment/insucar-api insucar-api=$ECR/insucar-api:<tag>
+   (or use the gated Spinnaker pipeline). Web files live in prototype/backend/web/{landing,enduser,operator}.html.
 
 ## Local tooling (installed to ~/.local/bin; add to PATH)
 export PATH="$HOME/.local/bin:$PATH"
@@ -53,19 +70,21 @@ export PATH="$HOME/.local/bin:$PATH"
 2. Trigger pipeline: python3 /tmp/spin_pipeline.py  (or POST /pipelines/insucar/deploy-insucar-api).
    Pipeline def committed at spinnaker/pipelines/insucar-deploy.json. Manifests in k8s/.
 
-## NEXT STEPS (priority order)
-1. Wire Jenkins -> Spinnaker webhook trigger; run full git-push -> build -> ECR -> deploy once.
-   (Jenkins agent needs Docker + AWS creds, or use Kaniko for in-cluster builds.)
-2. Expand Spinnaker pipeline: bake -> dev -> manual judgment -> UAT -> canary/red-black ->
-   product_owner judgment -> prod (per prompt).
-3. Move prototype off single EC2 onto EKS as the canonical env (Spinnaker already can).
-4. Build out real features from the prompt: Amazon Connect + Lex telephony, Keycloak SSO
-   (customer + staff realms, separate apps), Rust inner-core vault, Pinpoint SMS, TLS (ACM+ALB),
-   quorum-HA Postgres (Patroni), provider connectors (AXA/Towpal).
-5. Harden: rotate root AWS keys + PAT, add OIDC/TLS to Jenkins/Spinnaker, restrict LBs.
+## NEXT STEPS (priority order) — updated 2026-07-03 evening
+1. Replace demo auth with Keycloak (customer/staff/partner realms, MFA); wire the 3 apps to OIDC.
+2. Make operator console fully live/rich: auto-refresh queue, real screen-pop auto-open on incoming,
+   coverage-decision action, provider choice + fallback UI, SLA/aging timers, notes/timeline UI.
+   (Consider carrying the light brand into the console body, or keep dark — ask user.)
+3. Multi-tenant in code: resolve tenant by host/JWT and SET app.current_tenant so RLS engages.
+4. Real telephony: swap mock Connect for live Amazon Connect + Lex; Pinpoint SMS out of sandbox.
+5. Real provider connectors (AXA Roadside Missioning / Towpal) via the connector registry + webhooks.
+6. HA data: Patroni Postgres (quorum, 2+witness); move to separate AWS accounts per tier.
+7. Expand Spinnaker pipeline stages (bake->canary/Kayenta->prod); run git-push->deploy end-to-end.
+8. Harden: rotate the ROOT AWS keys + GitHub PAT; SSO+TLS in front of Jenkins/Spinnaker; restrict LBs.
+9. Optional: one consistent brand mark across all surfaces (swap OD landing logo for design/insucar-logo.svg).
 
-## Competitor research
-- Task in progress: analyze https://www.redion.com/mobility/ (see observations/ for output).
+## Competitor research (done)
+- observations/redion-analysis.md (Redion = ex-Europ Assistance) + operator-gui-research.md (CAD best practices).
 
 ## Cost / teardown
 - EKS + 2x t3.xlarge + several ELBs ~ $1/hr. Teardown steps in ci/CICD-DEPLOYMENT.md and
