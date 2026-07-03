@@ -2,58 +2,66 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="index,follow">
-<title>Insucar — Roadside Assistance | Account</title>
+<title>Insucar — Assistance</title>
 <style>
  :root{--brand:#0a7d5a}
  body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f7f6;color:#123}
- header{background:var(--brand);color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
- .wrap{max-width:520px;margin:32px auto;background:#fff;padding:24px;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
- h1{font-size:20px} label{display:block;margin:10px 0 4px;font-size:14px}
- input,select{width:100%;padding:10px;border:1px solid #cbd5d0;border-radius:8px;box-sizing:border-box}
- .row{display:flex;gap:10px} .row>div{flex:1}
- .consent{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px}
- button{margin-top:16px;width:100%;background:var(--brand);color:#fff;border:0;padding:12px;border-radius:8px;font-size:15px;cursor:pointer}
- .emergency{background:#c0392b;margin-top:8px}
- #out{margin-top:14px;font-size:14px;white-space:pre-wrap}
- .tab{cursor:pointer;padding:8px 14px;border-radius:8px 8px 0 0;background:#e3ebe8;display:inline-block}
- .tab.active{background:#fff;font-weight:600}
-</style>
-</head>
+ header{background:var(--brand);color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center}
+ .wrap{max-width:560px;margin:26px auto;background:#fff;padding:22px;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+ label{display:block;margin:8px 0 3px;font-size:14px}
+ input,select,textarea{width:100%;padding:9px;border:1px solid #cbd5d0;border-radius:8px;box-sizing:border-box}
+ .row{display:flex;gap:10px}.row>div{flex:1}
+ button{margin-top:12px;width:100%;background:var(--brand);color:#fff;border:0;padding:11px;border-radius:8px;font-size:15px;cursor:pointer}
+ .emergency{background:#c0392b}
+ .tabs{display:flex;gap:6px;margin-bottom:10px}.tab{flex:1;text-align:center;padding:8px;border-radius:8px;background:#e3ebe8;cursor:pointer}.tab.on{background:var(--brand);color:#fff}
+ .hidden{display:none}.muted{color:#567;font-size:13px}
+ table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}td,th{border-bottom:1px solid #e2e8e5;padding:6px;text-align:left}
+ .pill{padding:2px 8px;border-radius:12px;background:#e6f4ef;color:#0a7d5a;font-size:12px}
+ #out{margin-top:10px;font-size:14px}
+</style></head>
 <body data-app="enduser">
-<header><strong>Insucar</strong><span>Emergency roadside assistance</span></header>
-<div class="wrap">
-  <span class="tab active" id="tab">Create your account</span>
-  <h1 id="title">Register</h1>
-  <p style="font-size:13px;color:#456">Register so that when you break down we already know you, your car and your cover — no re-explaining under stress.</p>
-  <div class="row"><div><label>First name</label><input id="first" value="Test"></div><div><label>Last name</label><input id="last" value="Driver"></div></div>
-  <label>Email</label><input id="email" type="email" placeholder="you@example.com">
-  <div class="row">
-    <div><label>Country</label><select id="country"><option>FR</option><option>GB</option><option>DE</option></select></div>
-    <div><label>Mobile (E.164)</label><input id="phone" placeholder="+33600000009"></div>
+<header><strong>Insucar</strong><span id="whoami" class="muted">not signed in</span></header>
+
+<div class="wrap" id="authcard">
+  <div class="tabs"><div class="tab on" id="tabLogin" onclick="showTab('login')">Log in</div><div class="tab" id="tabReg" onclick="showTab('reg')">Register</div></div>
+  <div id="login">
+    <label>Email</label><input id="l_email" value="claire.martin@example.fr">
+    <label>Password</label><input id="l_pass" type="password" value="Claire#2026">
+    <button onclick="login()">Log in</button>
   </div>
-  <label>Preferred language</label><select id="language"><option value="en">English</option><option value="fr">Français</option><option value="de">Deutsch</option></select>
-  <label>Password</label><input id="password" type="password" placeholder="••••••••">
-  <div class="consent"><input type="checkbox" id="c_terms" checked><label for="c_terms" style="margin:0">I accept the Terms &amp; Privacy Policy</label></div>
-  <div class="consent"><input type="checkbox" id="c_rec" checked><label for="c_rec" style="margin:0">I consent to call recording (for my safety &amp; claims)</label></div>
-  <button id="submit">Create account</button>
-  <button class="emergency" id="help">🚨 I need help now</button>
+  <div id="reg" class="hidden">
+    <div class="row"><div><label>First name</label><input id="r_first" value="New"></div><div><label>Last name</label><input id="r_last" value="Customer"></div></div>
+    <label>Email</label><input id="r_email" placeholder="you@example.com">
+    <div class="row"><div><label>Country</label><select id="r_country"><option>FR</option><option>GB</option><option>DE</option></select></div><div><label>Mobile (E.164)</label><input id="r_phone" placeholder="+33600000009"></div></div>
+    <label>Password</label><input id="r_pass" type="password" placeholder="choose a password">
+    <button onclick="register()">Create account &amp; sign in</button>
+  </div>
   <div id="out"></div>
 </div>
+
+<div class="wrap hidden" id="dash">
+  <h3>Need help now?</h3>
+  <label>What happened?</label>
+  <select id="i_type"><option value="breakdown">Car won't start</option><option value="accident">Accident</option><option value="flat_tyre">Flat tyre</option><option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option></select>
+  <label>Describe it</label><textarea id="i_desc" rows="2" placeholder="e.g. engine won't turn over on the A6 near Beaune"></textarea>
+  <label>Location (address / description)</label><input id="i_addr" placeholder="A6 motorway, southbound, km 292">
+  <button class="emergency" onclick="submitIncident()">🚨 Request assistance</button>
+  <button onclick="logout()" style="background:#556">Log out</button>
+  <h3 style="margin-top:18px">My cases</h3>
+  <div id="cases" class="muted">—</div>
+</div>
+
 <script>
-document.getElementById('submit').onclick = async () => {
-  const body = {
-    email: v('email'), phone: v('phone'), first: v('first'), last: v('last'),
-    language: v('language'), country: v('country'),
-    consents: [ ...(c('c_terms')?['terms','privacy']:[]), ...(c('c_rec')?['call_recording']:[]) ]
-  };
-  const r = await fetch('/api/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const j = await r.json();
-  document.getElementById('out').textContent = r.ok ? '✅ Registered. Customer ID: '+j.customer_id : '⚠️ '+(j.error||'error');
-};
-document.getElementById('help').onclick = () => { document.getElementById('out').textContent='Calling assistance… (in production this dials the live Amazon Connect number)'; };
+async function api(path,opts){opts=opts||{};opts.headers=Object.assign({'Content-Type':'application/json'},opts.headers||{});opts.credentials='include';const r=await fetch(path,opts);return {ok:r.ok,status:r.status,body:await r.json().catch(()=>({}))};}
+function showTab(t){document.getElementById('tabLogin').classList.toggle('on',t=='login');document.getElementById('tabReg').classList.toggle('on',t=='reg');document.getElementById('login').classList.toggle('hidden',t!='login');document.getElementById('reg').classList.toggle('hidden',t!='reg');}
 function v(id){return document.getElementById(id).value;}
-function c(id){return document.getElementById(id).checked;}
+async function login(){const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:v('l_email'),password:v('l_pass')})});if(r.ok)enter(r.body);else out('⚠️ '+(r.body.error||'login failed'));}
+async function register(){const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:v('r_country'),phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else out('⚠️ '+(r.body.error||'register failed'));}
+async function logout(){await api('/api/logout',{method:'POST'});location.reload();}
+function out(m){document.getElementById('out').textContent=m;}
+function enter(me){document.getElementById('authcard').classList.add('hidden');document.getElementById('dash').classList.remove('hidden');document.getElementById('whoami').textContent='signed in: '+(me.name||'');loadCases();}
+async function submitIncident(){const r=await api('/api/user/incident',{method:'POST',body:JSON.stringify({incident:v('i_type'),description:v('i_desc'),address:v('i_addr')})});alert(r.ok?('Case created: '+r.body.case_number):'Error: '+(r.body.error||r.status));loadCases();}
+async function loadCases(){const r=await api('/api/user/cases');const c=(r.body.cases||[]);if(!c.length){document.getElementById('cases').textContent='No cases yet.';return;}let h='<table><tr><th>Case</th><th>Type</th><th>Status</th><th>Details</th></tr>';c.forEach(x=>h+=`<tr><td>${x.case_number}</td><td>${x.incident}</td><td><span class="pill">${x.status}</span></td><td>${x.description||''}</td></tr>`);document.getElementById('cases').innerHTML=h+'</table>';}
+(async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
 </script>
-</body>
-</html>
+</body></html>

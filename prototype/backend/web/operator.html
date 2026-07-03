@@ -7,94 +7,87 @@
 <style>
  body{font-family:system-ui,Arial,sans-serif;margin:0;background:#101820;color:#e8eef2}
  header{background:#1b2733;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0a7d5a}
- .grid{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px}
+ .wrap{max-width:420px;margin:60px auto;background:#17222e;padding:22px;border-radius:12px;border:1px solid #26333f}
+ label{display:block;margin:8px 0 3px;font-size:14px}
+ input{width:100%;padding:9px;border-radius:8px;border:1px solid #33434f;background:#0f1a24;color:#e8eef2;box-sizing:border-box}
+ button{margin-top:12px;background:#0a7d5a;color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600}
+ .grid{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:16px}
  .card{background:#17222e;border:1px solid #26333f;border-radius:10px;padding:14px;margin-bottom:14px}
- .card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#8fb0a5}
- .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700}
- .prio-emergency{background:#c0392b} .prio-high{background:#e67e22} .ok{background:#0a7d5a}
- input,button{padding:9px;border-radius:8px;border:1px solid #33434f;background:#0f1a24;color:#e8eef2}
- button{background:#0a7d5a;border:0;cursor:pointer;font-weight:600}
+ .card h3{margin:0 0 8px;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:#8fb0a5}
+ table{width:100%;border-collapse:collapse;font-size:13px}td,th{border-bottom:1px solid #26333f;padding:6px;text-align:left}
+ tr.sel{background:#12303f}.pill{padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700}
+ .p-emergency{background:#c0392b}.p-high{background:#e67e22}.p-normal{background:#2b6cb0}.ok{background:#0a7d5a}
  .kv{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;border-bottom:1px dashed #2a3742}
- .safety{background:#3a1414;border-color:#7a2d2d}
- #eta{font-size:26px;font-weight:800;color:#5ad19b}
- .muted{color:#7d94a1;font-size:12px}
-</style>
-</head>
+ .hidden{display:none}.muted{color:#7d94a1;font-size:12px}#eta{font-size:24px;font-weight:800;color:#5ad19b}
+ tr{cursor:pointer}
+</style></head>
 <body data-app="operator">
-<header><strong>Insucar · Operator Console</strong><span id="agent">Agent: Amelie Durand · 🟢 Available</span></header>
-<div class="grid">
+<header><strong>Insucar · Operator Console</strong><span id="agent" class="muted">not signed in</span></header>
+
+<div class="wrap" id="loginCard">
+  <h3 style="margin-top:0">Agent sign-in</h3>
+  <label>Agent ID</label><input id="a_id" value="OP-1001">
+  <label>Password</label><input id="a_pass" type="password" value="Operator#2026">
+  <button style="width:100%" onclick="alogin()">Sign in</button>
+  <div id="lerr" class="muted" style="margin-top:8px"></div>
+</div>
+
+<div class="grid hidden" id="console">
   <div>
     <div class="card">
-      <h3>Softphone / Incoming call</h3>
-      <div class="muted">Simulated call trigger (production = live Amazon Connect screen-pop)</div>
-      <input id="phone" value="+33600000001" style="width:100%;margin-top:8px">
-      <button style="width:100%;margin-top:8px" onclick="incoming()">📞 Answer incoming call</button>
+      <h3>Incoming call (mock Amazon Connect)</h3>
+      <input id="phone" value="+33600000001">
+      <button style="width:100%" onclick="incoming()">📞 Answer incoming call</button>
     </div>
-    <div class="card safety">
-      <h3>Safety triage (ask first)</h3>
-      <div class="kv"><span>Everyone safe?</span><span id="safe">—</span></div>
-      <div class="kv"><span>Injuries / medical?</span><span id="inj">—</span></div>
-      <button style="width:100%;margin-top:8px;background:#c0392b" onclick="document.getElementById('psap').textContent='↪ Warm-transferring to 112/PSAP…'">↪ Transfer to 112 (Tier-0)</button>
-      <div id="psap" class="muted" style="margin-top:6px"></div>
+    <div class="card">
+      <h3>Case queue</h3>
+      <div id="queue" class="muted">loading…</div>
     </div>
   </div>
   <div>
     <div class="card">
-      <h3>Screen-pop — caller identity</h3>
-      <div style="margin-bottom:8px"><span id="prio" class="pill">no active call</span></div>
-      <div class="kv"><span>Customer</span><span id="cust">—</span></div>
-      <div class="kv"><span>Language</span><span id="lang">—</span></div>
-      <div class="kv"><span>Policy</span><span id="pol">—</span></div>
-      <div class="kv"><span>Coverage</span><span id="cov">—</span></div>
-      <div class="kv"><span>Vehicle</span><span id="veh">—</span></div>
+      <h3>Screen-pop / case</h3>
+      <div style="margin-bottom:6px"><span id="prio" class="pill p-normal">no case selected</span></div>
+      <div class="kv"><span>Case</span><span id="c_no">—</span></div>
+      <div class="kv"><span>Customer</span><span id="c_cust">—</span></div>
+      <div class="kv"><span>Phone</span><span id="c_phone">—</span></div>
+      <div class="kv"><span>Incident</span><span id="c_inc">—</span></div>
+      <div class="kv"><span>Policy</span><span id="c_pol">—</span></div>
+      <div class="kv"><span>Vehicle</span><span id="c_veh">—</span></div>
+      <div class="kv"><span>Description</span><span id="c_desc">—</span></div>
     </div>
     <div class="card">
-      <h3>Coverage &amp; dispatch</h3>
-      <div class="kv"><span>Covered by policy</span><span id="covered">—</span></div>
-      <button id="dispatchBtn" style="margin-top:10px" disabled onclick="dispatch()">🚚 Dispatch nearest tow</button>
-      <div class="kv" style="margin-top:10px"><span>Provider</span><span id="prov">—</span></div>
-      <div class="kv"><span>Assigned driver</span><span id="driver">—</span></div>
-      <div style="margin-top:8px">ETA <span id="eta">—</span> <span class="muted">min</span></div>
-      <div id="link" class="muted" style="margin-top:8px"></div>
+      <h3>Dispatch</h3>
+      <button id="dispatchBtn" disabled onclick="dispatch()">🚚 Dispatch nearest provider</button>
+      <div class="kv" style="margin-top:8px"><span>Provider</span><span id="d_prov">—</span></div>
+      <div class="kv"><span>Driver</span><span id="d_drv">—</span></div>
+      <div>ETA <span id="eta">—</span> <span class="muted">min · <span id="d_sms"></span></span></div>
     </div>
-    <div class="card"><h3>Case timeline</h3><div id="log" class="muted">No active case.</div></div>
+    <button onclick="alogout()" style="background:#556">Log out</button>
   </div>
 </div>
+
 <script>
-let caseId=null;
-async function incoming(){
-  const phone=document.getElementById('phone').value;
-  logline('📞 Incoming call from '+phone+' — looking up…');
-  const r=await fetch('/api/lookup?phone='+encodeURIComponent(phone));
-  const j=await r.json();
-  if(!j.matched){ setPrio('unknown caller','prio-high'); document.getElementById('cust').textContent='Unknown — manual create'; return; }
-  document.getElementById('cust').textContent=j.customer.first_name+' '+j.customer.last_name+' ('+j.customer.country+')';
-  document.getElementById('lang').textContent=j.customer.language;
-  document.getElementById('pol').textContent=j.policy.policy_number;
-  document.getElementById('cov').textContent=j.policy.coverage+' / '+j.policy.status;
-  document.getElementById('veh').textContent=j.vehicle.make+' '+j.vehicle.model+' · '+j.vehicle.plate+' ('+j.vehicle.fuel+')';
-  const covered = j.policy.status==='active';
-  document.getElementById('covered').innerHTML = covered?'<span class="pill ok">YES</span>':'<span class="pill prio-high">CHECK</span>';
-  setPrio('HIGH — breakdown','prio-high');
-  document.getElementById('safe').textContent='asking…'; document.getElementById('inj').textContent='asking…';
-  // create the case (real)
-  const cr=await fetch('/api/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customerID:j.customer.id,incident:'breakdown',priority:'high'})});
-  const cj=await cr.json(); caseId=cj.case_id;
-  logline('🗂 Case '+cj.case_number+' created (status '+cj.status+').');
-  document.getElementById('dispatchBtn').disabled=false;
-}
-async function dispatch(){
-  if(!caseId)return;
-  const r=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caseID:caseId,service:'tow_recovery'})});
-  const j=await r.json();
-  document.getElementById('prov').textContent=j.provider;
-  document.getElementById('driver').textContent=j.driver.name+' · '+j.driver.plate;
-  document.getElementById('eta').textContent=j.eta_minutes;
-  document.getElementById('link').textContent='✅ Tokenized status link + driver ID sent to customer (Pinpoint SMS in prod).';
-  logline('🚚 Dispatched '+j.provider+' — ETA '+j.eta_minutes+' min.');
-}
-function setPrio(t,c){const e=document.getElementById('prio');e.textContent=t;e.className='pill '+c;}
-function logline(t){const l=document.getElementById('log'); if(l.textContent==='No active case.')l.textContent=''; l.textContent += (new Date().toLocaleTimeString()+'  '+t+'\n');}
+let selCase=null;
+async function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});o.credentials='include';const r=await fetch(p,o);return {ok:r.ok,status:r.status,body:await r.json().catch(()=>({}))};}
+function v(id){return document.getElementById(id).value;}
+async function alogin(){const r=await api('/api/agent/login',{method:'POST',body:JSON.stringify({agentID:v('a_id'),password:v('a_pass')})});if(r.ok)enter(r.body);else document.getElementById('lerr').textContent='⚠️ '+(r.body.error||'login failed');}
+async function alogout(){await api('/api/logout',{method:'POST'});location.reload();}
+function enter(me){document.getElementById('loginCard').classList.add('hidden');document.getElementById('console').classList.remove('hidden');document.getElementById('agent').textContent='Agent: '+me.name+' ('+(me.agent_id||me.staff_role)+') 🟢';loadQueue();}
+async function loadQueue(){const r=await api('/api/agent/cases');const c=(r.body.cases||[]);if(!c.length){document.getElementById('queue').textContent='Queue empty.';return;}let h='<table><tr><th>Case</th><th>Cust</th><th>Type</th><th>Prio</th></tr>';c.forEach(x=>h+=`<tr onclick="openCase('${x.id}')"><td>${x.case_number}</td><td>${x.customer}</td><td>${x.incident}</td><td><span class="pill p-${x.priority}">${x.priority}</span></td></tr>`);document.getElementById('queue').innerHTML=h+'</table>';}
+async function openCase(id){selCase=id;const r=await api('/api/agent/case?id='+id);const d=r.body;setp(d.priority);
+ document.getElementById('c_no').textContent=d.case_number;document.getElementById('c_cust').textContent=d.customer;
+ document.getElementById('c_phone').textContent=d.phone;document.getElementById('c_inc').textContent=d.incident;
+ document.getElementById('c_pol').textContent=(d.policy.number||'—')+' / '+(d.policy.coverage||'');
+ document.getElementById('c_veh').textContent=(d.vehicle.make||'')+' '+(d.vehicle.model||'')+' '+(d.vehicle.plate||'');
+ document.getElementById('c_desc').textContent=d.description||'—';
+ document.getElementById('dispatchBtn').disabled=false;
+ document.getElementById('d_prov').textContent=d.mission.provider||'—';document.getElementById('eta').textContent=d.mission.eta_minutes||'—';}
+async function incoming(){const r=await api('/api/telephony/mock/incoming',{method:'POST',body:JSON.stringify({phone:v('phone')})});const p=r.body;if(!p.matched){alert('Unknown caller — create case manually');return;}
+ // find or refresh queue then show the pop
+ alert('Screen-pop: '+p.screen_pop.customer.first_name+' '+p.screen_pop.customer.last_name+' · '+p.screen_pop.policy.policy_number+' · '+p.screen_pop.vehicle.make+' '+p.screen_pop.vehicle.model);loadQueue();}
+async function dispatch(){if(!selCase)return;const r=await api('/api/agent/dispatch',{method:'POST',body:JSON.stringify({caseID:selCase,service:'tow_recovery'})});const d=r.body;document.getElementById('d_prov').textContent=d.provider;document.getElementById('d_drv').textContent=d.driver.name+' · '+d.driver.plate;document.getElementById('eta').textContent=d.eta_minutes;document.getElementById('d_sms').textContent='SMS '+d.sms;loadQueue();}
+function setp(p){const e=document.getElementById('prio');e.textContent=p;e.className='pill p-'+p;}
+(async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='agent')enter({name:r.body.name,agent_id:''});})();
 </script>
-</body>
-</html>
+</body></html>

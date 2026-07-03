@@ -137,3 +137,14 @@ Last updated: 2026-07-03
 - HPA: insucar-api (cpu 60%, 2->6). Node role: eksctl-insucar-nodegroup-ng-standa-NodeInstanceRole-q21hJS3Im7Ph
   (has AmazonSNSFullAccess + AmazonEC2ContainerRegistryPowerUser).
 - Provider stub (real HTTP): svc provider-axa.insucar.svc.cluster.local:5678
+
+## Prototype login credentials (app-level auth, demo)
+End-user app (login by email) at http://<app-lb>/login :
+- claire.martin@example.fr / Claire#2026
+- john.smith@example.co.uk / John#2026
+- lukas.mueller@example.de / Lukas#2026
+Operator console (login by agent ID) at http://<app-lb>/ops-console-7f3a9c :
+- OP-1001  / Operator#2026   (operator: Amelie Durand)
+- SUP-2001 / Supervisor#2026 (supervisor: Marc Petit)
+- PO-3001  / Owner#2026      (product owner: Sophie Bernard)
+Current app LB: (see `kubectl -n insucar get svc insucar-api`)
