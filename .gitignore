@@ -142,5 +142,3 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# local secrets — never commit
-access.md
