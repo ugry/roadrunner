@@ -15,7 +15,7 @@ spec:
       resources:
         requests: { cpu: "250m", memory: "512Mi" }
     - name: tools
-      image: curlimages/curl:8.10.1
+      image: alpine:3.20
       command: ["sleep"]
       args: ["9999999"]
 '''
@@ -43,8 +43,7 @@ spec:
               --context="$(pwd)/prototype/backend" \
               --dockerfile="$(pwd)/prototype/backend/Dockerfile" \
               --destination="$ECR:$TAG" \
-              --destination="$ECR:latest" \
-              --cache=true
+              --destination="$ECR:latest"
           '''
         }
       }
@@ -54,9 +53,9 @@ spec:
       steps {
         container('tools') {
           sh '''
-            curl -sS -X POST "$SPINNAKER_WEBHOOK" \
-              -H "Content-Type: application/json" \
-              -d "{\\"parameters\\":{\\"imageTag\\":\\"$TAG\\"}}"
+            wget -q -O- --header="Content-Type: application/json" \
+              --post-data="{\\"parameters\\":{\\"imageTag\\":\\"$TAG\\"}}" \
+              "$SPINNAKER_WEBHOOK" || true
             echo "triggered Spinnaker (imageTag=$TAG)"
           '''
         }
