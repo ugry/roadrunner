@@ -101,10 +101,12 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "/app/web/operator.html")
 		return
 	}
-	// Users-only landing on the apex / other hosts
+	// Users-only surface on the apex / other hosts
 	switch r.URL.Path {
-	case "/", "/login", "/register":
-		http.ServeFile(w, r, "/app/web/enduser.html")
+	case "/":
+		http.ServeFile(w, r, "/app/web/landing.html") // marketing landing
+	case "/app", "/login", "/register":
+		http.ServeFile(w, r, "/app/web/enduser.html") // functional user app
 	default:
 		http.NotFound(w, r)
 	}
