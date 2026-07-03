@@ -34,12 +34,18 @@
   @media(max-width:640px){.grid2{grid-template-columns:1fr}}
   #out{margin-top:10px;font-size:13px}
   .logo{width:34px;height:34px}
+  .topbtn{border:1px solid var(--line);background:#fff;color:var(--navy);font-weight:700;font-size:14px;padding:8px 16px;border-radius:10px;cursor:pointer}
+  .topbtn:hover{border-color:var(--brand);color:var(--brand)}
 </style></head>
 <body>
 <div class="bar">
   <svg class="logo" viewBox="0 0 80 80" aria-hidden="true"><defs><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#12a06f"/><stop offset="1" stop-color="#0a7d5a"/></linearGradient></defs><path d="M40 3 L73 15 V40 C73 57 60 69 40 77 C20 69 7 57 7 40 V15 Z" fill="url(#s)"/><path d="M23 63 L36 25 H44 L57 63 Z" fill="#fff" opacity=".92"/><g transform="translate(40,23)"><path d="M0 -12 C6.6 -12 11 -7.6 11 -1.5 C11 5.5 0 14 0 14 C0 14 -11 5.5 -11 -1.5 C-11 -7.6 -6.6 -12 0 -12 Z" fill="#f5a623"/><circle cy="-1.5" r="4" fill="#0b1f2a"/></g></svg>
   <div class="wm">Insu<span>car</span></div>
-  <div class="who" id="whoami">not signed in</div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+    <span class="who" id="whoami"></span>
+    <button id="loginTop" class="topbtn" onclick="showTab('login')">Log in</button>
+    <button id="logoutTop" class="topbtn hidden" onclick="logout()">Log out</button>
+  </div>
 </div>
 
 <div class="wrap">
@@ -74,7 +80,6 @@
         <label>Describe it</label><textarea id="i_desc" rows="2" placeholder="engine won't turn over on the A6 near Beaune"></textarea>
         <label>Location</label><input id="i_addr" placeholder="A6 southbound, km 292">
         <button class="btn btn-danger" onclick="submitIncident()">🚨 Request assistance now</button>
-        <button class="btn btn-ghost" onclick="logout()">Log out</button>
       </div></div>
       <div class="card"><div class="card-h"><b>My cases</b><span class="pill" id="me2" style="margin-left:auto"></span></div><div class="card-b" style="padding-top:8px"><div id="cases" class="muted">—</div></div></div>
     </div>
@@ -88,7 +93,7 @@ function showTab(t){el('tabLogin').classList.toggle('on',t=='login');el('tabReg'
 async function login(){const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:v('l_email'),password:v('l_pass')})});if(r.ok)enter(r.body);else el('out').textContent='⚠ '+(r.body.error||'login failed');}
 async function register(){const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:v('r_country'),phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else el('out').textContent='⚠ '+(r.body.error||'register failed');}
 async function logout(){await api('/api/logout',{method:'POST'});location.reload();}
-function enter(me){el('authcard').classList.add('hidden');el('dash').classList.remove('hidden');el('whoami').textContent='signed in: '+(me.name||'');el('me2').textContent=me.name||'';loadCases();}
+function enter(me){el('authcard').classList.add('hidden');el('dash').classList.remove('hidden');el('whoami').textContent=me.name||'';el('me2').textContent=me.name||'';el('loginTop').classList.add('hidden');el('logoutTop').classList.remove('hidden');loadCases();}
 async function submitIncident(){const r=await api('/api/user/incident',{method:'POST',body:JSON.stringify({incident:v('i_type'),description:v('i_desc'),address:v('i_addr')})});if(r.ok){alert('Case created: '+r.body.case_number+' — a coordinator will assist you.');loadCases();}else alert('Error: '+(r.body.error||r.status));}
 async function loadCases(){const r=await api('/api/user/cases');const c=r.body.cases||[];if(!c.length){el('cases').textContent='No cases yet.';return;}let h='<table><tr><th>Case</th><th>Type</th><th>Status</th><th>Details</th></tr>';c.forEach(x=>h+=`<tr><td>${x.case_number.replace('CASE-','#')}</td><td>${x.incident}</td><td><span class="pill">${x.status}</span></td><td>${x.description||''}</td></tr>`);el('cases').innerHTML=h+'</table>';}
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
