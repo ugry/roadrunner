@@ -76,10 +76,8 @@ func main() {
 	mux.HandleFunc("/api/agent/lookup", requireRole("agent", handleLookup))
 	mux.HandleFunc("/api/agent/dispatch", requireRole("agent", handleDispatch))
 
-	// pages
-	mux.HandleFunc("/", serveFile("enduser.html"))
-	mux.HandleFunc("/login", serveFile("enduser.html"))
-	mux.HandleFunc("/register", serveFile("enduser.html"))
+	// pages (host-based: op.* -> operators only, apex -> users only)
+	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc(opsPath, serveFile("operator.html"))
 
 	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v)", opsPath, providerURL, snsClient != nil)
@@ -93,6 +91,25 @@ func logMW(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	// Operators-only surface on op.*
+	if strings.HasPrefix(host, "op.") {
+		http.ServeFile(w, r, "/app/web/operator.html")
+		return
+	}
+	// Users-only landing on the apex / other hosts
+	switch r.URL.Path {
+	case "/", "/login", "/register":
+		http.ServeFile(w, r, "/app/web/enduser.html")
+	default:
+		http.NotFound(w, r)
+	}
+}
+
 func serveFile(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if name == "enduser.html" && r.URL.Path != "/" && r.URL.Path != "/login" && r.URL.Path != "/register" {

@@ -148,3 +148,9 @@ Operator console (login by agent ID) at http://<app-lb>/ops-console-7f3a9c :
 - SUP-2001 / Supervisor#2026 (supervisor: Marc Petit)
 - PO-3001  / Owner#2026      (product owner: Sophie Bernard)
 Current app LB: (see `kubectl -n insucar get svc insucar-api`)
+
+## Live domains (functional)
+- Users:     http://unysolar.com/  (also app.unysolar.com) — landing + login/register + request assistance
+- Operators: http://op.unysolar.com/ — Mission-Control operator console (agent login only)
+- Backend routes by Host: op.* -> operator console; apex -> user landing (users only / operators only).
+- Same seeded logins (users by email, agents by agent ID) apply.

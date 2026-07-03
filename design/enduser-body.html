@@ -1,0 +1,98 @@
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06101d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg></div>
+      <div class="brand-name">Insu<span>car</span></div>
+      <div class="brand-sub">Roadside &amp;<br>Mobility</div>
+    </div>
+    <div style="margin-left:auto" class="agent"><span class="who" id="whoami" style="font-size:12px;color:var(--muted)">not signed in</span></div>
+  </header>
+
+  <div style="max-width:1080px;margin:0 auto;padding:28px 20px;width:100%">
+    <!-- HERO -->
+    <div id="hero" class="panel" style="overflow:hidden;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:0">
+        <div style="padding:40px">
+          <div class="mhelp-badge" style="display:inline-block">24/7 · 200+ countries</div>
+          <h1 style="font-size:var(--text-3xl);line-height:1.05;margin:14px 0;letter-spacing:-.02em">Stranded? Help is one tap away.</h1>
+          <p class="dim" style="font-size:var(--text-lg);max-width:46ch">Insucar gets you moving again — breakdown, accident, flat tyre, EV charge or a medical emergency. A real coordinator, a real tow, live ETA. Fast.</p>
+          <div style="display:flex;gap:10px;margin-top:22px">
+            <button class="btn btn-primary" style="width:auto;padding:12px 22px" onclick="scrollAuth()">Sign in / Register</button>
+            <button class="btn btn-danger" style="width:auto;padding:12px 22px" onclick="scrollAuth()">🚨 I need help now</button>
+          </div>
+        </div>
+        <div style="background:linear-gradient(160deg,#141c2b,#0c1220);display:grid;place-items:center;border-left:1px solid var(--border)">
+          <svg width="180" height="180" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity=".85"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUTH -->
+    <div id="authcard" class="panel" style="max-width:520px;margin:0 auto">
+      <div class="panel-head"><div class="panel-title"><span id="tabLogin" class="tabx on" onclick="showTab('login')">Log in</span> &nbsp;·&nbsp; <span id="tabReg" class="tabx" onclick="showTab('reg')">Register</span></div><span class="tag">unysolar.com</span></div>
+      <div class="panel-body">
+        <div id="login">
+          <div class="subhead">Email</div><input id="l_email" class="in" style="width:100%" value="claire.martin@example.fr">
+          <div class="subhead" style="margin-top:10px">Password</div><input id="l_pass" type="password" class="in" style="width:100%" value="Claire#2026">
+          <button class="btn btn-primary" style="margin-top:14px" onclick="login()">Log in</button>
+        </div>
+        <div id="reg" style="display:none">
+          <div class="grid-2"><div><div class="subhead">First name</div><input id="r_first" class="in" style="width:100%" value="New"></div><div><div class="subhead">Last name</div><input id="r_last" class="in" style="width:100%" value="Customer"></div></div>
+          <div class="subhead" style="margin-top:10px">Email</div><input id="r_email" class="in" style="width:100%" placeholder="you@example.com">
+          <div class="grid-2" style="margin-top:10px"><div><div class="subhead">Country</div><input id="r_country" class="in" style="width:100%" value="FR"></div><div><div class="subhead">Mobile (E.164)</div><input id="r_phone" class="in" style="width:100%" placeholder="+33600000009"></div></div>
+          <div class="subhead" style="margin-top:10px">Password</div><input id="r_pass" type="password" class="in" style="width:100%">
+          <button class="btn btn-primary" style="margin-top:14px" onclick="register()">Create account &amp; sign in</button>
+        </div>
+        <div id="out" class="dim" style="margin-top:10px;font-size:13px"></div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dash" style="display:none">
+      <div class="grid-2" style="gap:20px;align-items:start">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">🚨 Request assistance</div></div>
+          <div class="panel-body">
+            <div class="subhead">What happened?</div>
+            <select id="i_type" class="in" style="width:100%">
+              <option value="breakdown">Car won't start</option><option value="accident">Accident</option>
+              <option value="flat_tyre">Flat tyre</option><option value="ev_no_charge">EV — no charge</option>
+              <option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option>
+            </select>
+            <div class="subhead" style="margin-top:10px">Describe it</div>
+            <textarea id="i_desc" class="in" rows="2" style="width:100%" placeholder="engine won't turn over on the A6 near Beaune"></textarea>
+            <div class="subhead" style="margin-top:10px">Location</div>
+            <input id="i_addr" class="in" style="width:100%" placeholder="A6 southbound, km 292">
+            <button class="btn btn-danger" style="margin-top:14px" onclick="submitIncident()">🚨 Request assistance now</button>
+            <button class="ctl" style="width:100%;margin-top:8px" onclick="logout()">Log out</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">My cases</div><span class="tag" id="me2"></span></div>
+          <div class="panel-body" style="padding:6px"><div id="cases" class="dim" style="padding:10px">—</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>.in{padding:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface-warm);color:var(--fg)}
+.tabx{cursor:pointer;color:var(--muted)}.tabx.on{color:var(--accent)}
+#cases table{width:100%;border-collapse:collapse;font-size:12px}#cases td,#cases th{border-bottom:1px solid var(--border-soft);padding:6px;text-align:left}
+.qp{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;background:color-mix(in oklab,var(--accent) 16%,transparent);color:var(--accent)}</style>
+
+<script>
+async function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});o.credentials='include';const r=await fetch(p,o);return{ok:r.ok,status:r.status,body:await r.json().catch(()=>({}))};}
+function v(id){return document.getElementById(id).value;}function el(id){return document.getElementById(id);}
+function showTab(t){el('tabLogin').classList.toggle('on',t=='login');el('tabReg').classList.toggle('on',t=='reg');el('login').style.display=t=='login'?'block':'none';el('reg').style.display=t=='reg'?'block':'none';}
+function scrollAuth(){el('authcard').scrollIntoView({behavior:'smooth'});}
+async function login(){const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:v('l_email'),password:v('l_pass')})});if(r.ok)enter(r.body);else el('out').textContent='⚠ '+(r.body.error||'login failed');}
+async function register(){const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:v('r_country'),phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else el('out').textContent='⚠ '+(r.body.error||'register failed');}
+async function logout(){await api('/api/logout',{method:'POST'});location.reload();}
+function enter(me){el('hero').style.display='none';el('authcard').style.display='none';el('dash').style.display='block';el('whoami').textContent='signed in: '+(me.name||'');el('me2').textContent=me.name||'';loadCases();}
+async function submitIncident(){const r=await api('/api/user/incident',{method:'POST',body:JSON.stringify({incident:v('i_type'),description:v('i_desc'),address:v('i_addr')})});if(r.ok){alert('Case created: '+r.body.case_number+' — a coordinator will assist you.');loadCases();}else alert('Error: '+(r.body.error||r.status));}
+async function loadCases(){const r=await api('/api/user/cases');const c=r.body.cases||[];if(!c.length){el('cases').textContent='No cases yet.';return;}let h='<table><tr><th>Case</th><th>Type</th><th>Status</th><th>Details</th></tr>';c.forEach(x=>h+=`<tr><td class="mono">${x.case_number.replace('CASE-','#')}</td><td>${x.incident}</td><td><span class="qp">${x.status}</span></td><td>${x.description||''}</td></tr>`);el('cases').innerHTML=h+'</table>';}
+(async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
+</script>
+</body></html>
