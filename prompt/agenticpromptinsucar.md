@@ -127,6 +127,9 @@ Case 3 — Production (groups `insucar-devops-prod-readonly` and `insucar-prod-b
 - Data: encryption at rest + in transit, least privilege, row-level security, audited access.
 - Telephony fraud controls: toll-fraud / robocall protection and rate limiting on the inbound line.
 - Status-link security: tokenized, short-expiry, no PII in the URL, revocable.
+- Surface isolation: end-user and operator apps are separate hosts + separate Keycloak realms +
+  separate session cookies (no cross-SSO). The operator surface is non-discoverable (noindex, not
+  linked, generic 404 to strangers), MFA-mandatory, and zero-trust/IP-restricted.
 
 ## GDPR & multi-jurisdiction privacy
 - EU data residency (eu-west-1) for EU subjects; consent capture incl. call recording per country
@@ -217,6 +220,62 @@ customer, case *—* provider_mission; reference data (make/model catalog).
   and live status of an active incident. Right-to-erasure request is exposed here.
 - Data model is realised in `db/schema.sql` (customers, verification_tokens, consents, policies,
   policy_territories, policy_entitlements, vehicles, policy_vehicles, ...).
+
+## UI surfaces & login separation (two distinct apps)
+End users and operators use SEPARATE applications on SEPARATE login pages. They must not share a
+login screen, and the operator surface must not be discoverable by end users.
+- END-USER app: public, discoverable (e.g. `app.unysolar.com` / `/login`, `/register`). Keycloak
+  CUSTOMER realm. Self-service scope only.
+- OPERATOR/STAFF app: separate, NON-advertised host/path (e.g. `ops.<internal-domain>` or an
+  obscure path), Keycloak STAFF realm. NOT linked from the public site, `noindex/nofollow`, not in
+  sitemap. Security is by real controls, not just obscurity: zero-trust/VPN or IP allowlist, WAF,
+  mandatory MFA, and RBAC (operator/supervisor/admin/ops/product_owner). An end user hitting the
+  operator URL gets a generic 404/hidden response — no hint the surface exists.
+- Fully separate: different domains/subdomains, different OIDC clients + realms, different session
+  cookies (no shared SSO between customer and staff), different rate-limit and WAF policies.
+
+### End-user REGISTRATION page (fields, from the end-user's perspective)
+"I broke down once and never want to be stuck re-explaining who I am — let me register calmly now."
+- Account: first name, last name, email (verify via OTP), mobile phone in E.164 with country
+  selector (verify via SMS OTP — this phone is the emergency ANI match), password (or social/SSO),
+  preferred language, country of residence.
+- Consents (explicit checkboxes, stored immutably): accept Terms, Privacy Policy, call-recording
+  consent, optional marketing opt-in.
+- Add vehicle(s): license plate + plate country, make, model, year, colour, fuel type (incl. EV),
+  transmission, category (car/van/motorhome/motorcycle), VIN (optional).
+- Policy: enter an existing policy number to link, OR choose/purchase a plan (product + coverage
+  level shown with entitlements).
+- Optional but valued: home address (for home-start + correspondence), an emergency contact,
+  accessibility needs (e.g. wheelchair, hearing — routes to text/RTT channel), child-seat/pet flags.
+- Registration UX: minimal required set first (name/email/phone/password/consent), then a guided
+  "add your car" and "link your policy" step; progress saved; WCAG 2.1 AA; localized.
+
+### End-user DASHBOARD (post-login, self-service)
+- Prominent "I NEED HELP NOW" emergency action (start a case / show the assistance number / request
+  a call) — always one tap from anywhere.
+- My vehicles (add/edit/remove); My policy & coverage (entitlements, excess, validity, callouts
+  used); Case history + LIVE status of an active incident (map, ETA, assigned tow driver
+  name/plate/photo, status link).
+- Profile & language; consent management; right-to-erasure request; notification preferences.
+
+### OPERATOR CONSOLE screen (what the operator wants to see, from the operator's perspective)
+"A call just landed and someone is stranded — show me everything in one glance, let me help fast."
+- Incoming-call banner + softphone controls (answer/hold/mute/transfer/3-way conference/hangup,
+  recording-pause) bound to the CCP; queue view (waiting count, longest wait, SLA).
+- SCREEN-POP header: caller identity, matched customer/policy/vehicle, verification badge, and a
+  big PRIORITY/severity indicator; SAFETY panel first (is everyone safe? injuries? fire? live
+  traffic?) with a one-click 112/PSAP warm-transfer for Tier-0.
+- Case workspace (pre-filled, editable): incident details, location map (live pin + what3words),
+  vehicle details, coverage-decision panel (covered? entitlements, excess payable, reason if not),
+  and a SUGGESTED required service the operator can override (human-in-the-loop).
+- Dispatch panel: nearest providers ranked by availability/performance/ETA, one-click dispatch,
+  automatic fallback chain, manual click-to-dial + 3-way conference; live mission status timeline
+  and shrinking ETA on the map; button to send the customer a tokenized status link + driver-trust
+  info.
+- Case timeline / interaction log (auto-stamped call + dispatch events + manual notes), SLA/aging
+  timer, dedup indicator (linked open cases), and quick actions: schedule callback, escalate to
+  supervisor, request interpreter (caller-language mismatch), arrange onward mobility.
+- Everything multilingual to the operator's locale; no re-keying of anything the IVR captured.
 
 ## Operator workflow additions
 - Screen-pop miss / unknown caller / third-party reporter: manual case-create + search by
@@ -340,8 +399,10 @@ account) so node-failover is exercised from day one:
    (live sandbox/API) + fallback chain.
 4. Go backend services + Go BFF (generated TS types) + Postgres/PostGIS from `db/schema.sql` +
    `db/seed.sql` real-shaped seed (entity relationships enforced by FKs).
-4b. Customer registration & self-service portal: signup + email/phone verification + consent
-    capture (Keycloak customer realm) + manage vehicles/policy + view case status/history.
+4b. Customer registration & self-service portal (SEPARATE app/host, customer Keycloak realm):
+    signup + email/phone verification + consent capture + manage vehicles/policy + case status.
+4c. Operator/staff console as a SEPARATE, non-discoverable app/host (staff Keycloak realm, MFA,
+    zero-trust) — no shared login with the end-user app.
 5. Rust inner-core vault (KMS envelope encryption + SHA-256-chained audit ledger, network-isolated).
 6. Keycloak SSO (OIDC/OAuth/SAML/Kerberos/AD) with RBAC incl. product_owner.
 7. Live ETA map + tokenized customer SMS status link via Amazon Pinpoint (real).
