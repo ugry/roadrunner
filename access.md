@@ -97,3 +97,43 @@ Last updated: 2026-07-03
 - Prototype EC2 app: http://app.unysolar.com:8080/  (hidden operator: /ops-console-7f3a9c)
 - kubeconfig: aws eks update-kubeconfig --name insucar --region eu-west-1
 - Spinnaker webhook (Jenkins->deploy): http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com/webhooks/webhook/insucar-ci
+
+## Jenkins & Spinnaker — full operational details (updated 2026-07-03)
+### Jenkins
+- Helm release: jenkins/jenkins 5.9.32 (Jenkins 2.555.3), namespace `jenkins`.
+- UI: http://a69a0dc446e674657ac3fae06d8dd559-1651454478.eu-west-1.elb.amazonaws.com:8080
+- Login: admin / InsucarAdmin!2026
+- Retrieve creds from cluster:
+  kubectl -n jenkins get secret jenkins -o jsonpath='{.data.jenkins-admin-user}'     | base64 -d
+  kubectl -n jenkins get secret jenkins -o jsonpath='{.data.jenkins-admin-password}' | base64 -d
+- Job: insucar-ci (Pipeline from SCM -> ci/Jenkinsfile). Git cred id: github-pat.
+- Agents: Kubernetes plugin spawns Kaniko + alpine pods in ns `jenkins` for builds.
+- Trigger a build via API:
+  CRUMB=$(curl -s -c /tmp/cj --user admin:InsucarAdmin!2026 "$J/crumbIssuer/api/json" | jq -r .crumb)
+  curl -b /tmp/cj --user admin:InsucarAdmin!2026 -H "Jenkins-Crumb: $CRUMB" -X POST "$J/job/insucar-ci/build"
+- Port-forward (if LB down): kubectl -n jenkins port-forward svc/jenkins 8080:8080
+
+### Spinnaker
+- Installed by spinnaker-operator (ns `spinnaker-operator`); services in ns `spinnaker`; version 1.36.1.
+- Deck (UI):  http://a4977860e39434f278d0b4dedbcd4bb5-449340997.eu-west-1.elb.amazonaws.com  (no auth; app "insucar")
+- Gate (API): http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com  (/health)
+- Application: insucar · Pipeline: deploy-insucar-api · Pipeline id: 584af310-21f5-427d-ac3b-a0d5c065fc18
+- Pipeline stages: Deploy DEV -> Promote to UAT? (manualJudgment) -> Deploy UAT ->
+  Promote to PROD? (product owner, manualJudgment) -> Deploy PROD.
+- Webhook trigger: POST http://<gate>/webhooks/webhook/insucar-ci
+- Kubernetes deploy account: insucar-eks (kubeconfig injected via operator files;
+  SA spin-deployer cluster-admin). Target namespaces: insucar, insucar-dev, insucar-uat, insucar-prod.
+- Persistence (Front50): S3 s3://insucar-spinnaker-326804802908 (rootFolder front50).
+- Jenkins integration (igor) master: insucar-jenkins (points to jenkins.jenkins.svc.cluster.local:8080).
+- Trigger deploy manually via Gate:
+  curl -s -X POST http://<gate>/pipelines/insucar/deploy-insucar-api -H 'Content-Type: application/json' -d '{"type":"manual"}'
+- Approve a manual-judgment stage via Gate:
+  curl -s -X PATCH http://<gate>/pipelines/<execId>/stages/<stageId> -H 'Content-Type: application/json' -d '{"judgmentStatus":"continue"}'
+- Port-forward (if LB down): kubectl -n spinnaker port-forward svc/spin-deck 9000:9000 ; svc/spin-gate 8084:8084
+
+### CI/CD supporting
+- ECR repo: 326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api (tags :1, :2, :latest, build numbers)
+- Cluster Autoscaler: helm autoscaler/cluster-autoscaler 9.58.0 (ns kube-system); nodegroup ng-standard min2/max5.
+- HPA: insucar-api (cpu 60%, 2->6). Node role: eksctl-insucar-nodegroup-ng-standa-NodeInstanceRole-q21hJS3Im7Ph
+  (has AmazonSNSFullAccess + AmazonEC2ContainerRegistryPowerUser).
+- Provider stub (real HTTP): svc provider-axa.insucar.svc.cluster.local:5678
