@@ -1,0 +1,100 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"16px","fontFamily":"Helvetica, Arial, sans-serif"},"flowchart":{"nodeSpacing":45,"rankSpacing":60}}}%%
+flowchart TB
+  Caller(["Broken-down driver<br/>(accident / technical / medical)"]):::client
+  Operator(["Human operator<br/>SSO softphone console"]):::client
+  CustLink(["Customer status link<br/>driver name / plate / photo"]):::client
+
+  subgraph TEL["Telephony — LIVE (multi-region DR)"]
+    direction TB
+    Connect["Amazon Connect<br/>contact flow + Lex spoken intake<br/>agent-from-every-node + 112/PSAP warm transfer"]:::aws
+    Lambda["Lambda ANI to policy lookup<br/>severity routing T0/T1/T2"]:::aws
+    Connect --> Lambda
+  end
+
+  subgraph EDGE["Edge"]
+    WAF["WAF / CDN + DDoS"]:::edge
+    LB["Ingress / Load Balancer<br/>health-checked, active-active"]:::edge
+    WAF --> LB
+  end
+
+  Caller ==> Connect
+  Operator ==> WAF
+  Connect ==> WAF
+
+  subgraph K8S["Kubernetes cluster — QUORUM HA across 3 Availability Zones (no single point of failure)"]
+    direction TB
+
+    subgraph AZ1["AZ-1 (ACTIVE)"]
+      direction TB
+      BFF1["Go BFF + WebSocket"]:::svc
+      SVC1["Go services<br/>case · dispatch(PostGIS) · provider-integ · coverage · notify"]:::svc
+      VLT1["Rust inner-core vault<br/>KMS envelope + SHA-256 ledger"]:::vault
+      PGP[("Postgres PRIMARY<br/>Patroni")]:::data
+      NATS1[("NATS-1")]:::data
+    end
+
+    subgraph AZ2["AZ-2 (ACTIVE)"]
+      direction TB
+      BFF2["Go BFF + WebSocket"]:::svc
+      SVC2["Go services<br/>case · dispatch(PostGIS) · provider-integ · coverage · notify"]:::svc
+      VLT2["Rust inner-core vault<br/>KMS envelope + SHA-256 ledger"]:::vault
+      PGS[("Postgres STANDBY<br/>sync replication")]:::data
+      NATS2[("NATS-2")]:::data
+    end
+
+    subgraph AZ3["AZ-3 (WITNESS / quorum)"]
+      direction TB
+      ETCD[("etcd / Patroni witness<br/>maintains majority")]:::quorum
+      NATS3[("NATS-3 (R3 raft)")]:::quorum
+      REDIS[("Redis Sentinel quorum")]:::quorum
+    end
+
+    LB ==> BFF1 & BFF2
+    BFF1 --> SVC1 --> VLT1
+    BFF2 --> SVC2 --> VLT2
+    PGP <== "sync repl" ==> PGS
+    PGP -. "leader election (2/3 majority)" .- ETCD
+    PGS -. "leader election (2/3 majority)" .- ETCD
+    NATS1 <--> NATS2 <--> NATS3
+    SVC1 & SVC2 --> REDIS
+  end
+
+  subgraph SEC["Security / Identity"]
+    KC["Keycloak SSO<br/>OIDC · OAuth2 · SAML · Kerberos/AD"]:::sec
+    SM["AWS Secrets Manager<br/>short-lived creds"]:::sec
+    LEDGER[["Immutable blockchain ledger<br/>prod-access grants:<br/>who / when / why / approver"]]:::ledger
+  end
+  BFF1 & BFF2 --> KC
+  SVC1 & SVC2 --> SM
+
+  subgraph PROV["External providers — REAL connectors (adapter pattern)"]
+    TOW["Tow / recovery API<br/>AXA Missioning / Towpal (live sandbox)"]:::ext
+    HOTEL["Hotel — Booking.com Demand"]:::ext
+    REPAIR["Repair / body — CrashBay / Autorox"]:::ext
+    PIN["Amazon Pinpoint — real SMS"]:::aws
+  end
+  SVC1 & SVC2 ==> TOW
+  SVC1 & SVC2 --> HOTEL & REPAIR
+  SVC1 & SVC2 ==> PIN
+  PIN ==> CustLink
+  TOW -. "webhooks: status + live ETA" .-> SVC1
+
+  subgraph OPS["Delivery & Observability"]
+    SPIN["Spinnaker CD<br/>bake → dev → UAT → canary → product-owner manual judgment → prod"]:::ops
+    OBS["Prometheus · Loki · Grafana · Alertmanager<br/>auth.log / system.log / error.log + business KPIs"]:::ops
+  end
+  K8S --> OBS
+  SPIN -. "deploys (JIT prod role, ledger-logged)" .-> K8S
+  SPIN --> LEDGER
+
+  classDef client fill:#eef6ff,stroke:#2b6cb0,stroke-width:2px,color:#1a365d;
+  classDef aws fill:#fff4e6,stroke:#dd6b20,stroke-width:2px,color:#7b341e;
+  classDef edge fill:#f0fff4,stroke:#38a169,stroke-width:2px,color:#22543d;
+  classDef svc fill:#e6fffa,stroke:#319795,stroke-width:2px,color:#234e52;
+  classDef vault fill:#fff5f5,stroke:#c53030,stroke-width:2px,color:#742a2a;
+  classDef data fill:#ebf8ff,stroke:#3182ce,stroke-width:2px,color:#2a4365;
+  classDef quorum fill:#faf5ff,stroke:#805ad5,stroke-width:2px,color:#44337a;
+  classDef sec fill:#fffaf0,stroke:#b7791f,stroke-width:2px,color:#5f370e;
+  classDef ledger fill:#f7fafc,stroke:#1a202c,stroke-width:3px,color:#1a202c;
+  classDef ext fill:#f5f5f5,stroke:#718096,stroke-width:2px,color:#2d3748;
+  classDef ops fill:#edf2f7,stroke:#4a5568,stroke-width:2px,color:#2d3748;
