@@ -1,0 +1,31 @@
+{
+  "application": "insucar",
+  "name": "deploy-insucar-api",
+  "keepWaitingPipelines": false,
+  "limitConcurrent": true,
+  "triggers": [],
+  "stages": [
+    {
+      "refId": "1",
+      "requisiteStageRefIds": [],
+      "type": "deployManifest",
+      "name": "Deploy insucar-api",
+      "account": "insucar-eks",
+      "cloudProvider": "kubernetes",
+      "source": "text",
+      "moniker": { "app": "insucar" },
+      "manifests": [
+        { "apiVersion": "apps/v1", "kind": "Deployment", "metadata": { "name": "insucar-api", "namespace": "insucar", "labels": { "app": "insucar-api" } },
+          "spec": { "replicas": 2, "selector": { "matchLabels": { "app": "insucar-api" } },
+            "template": { "metadata": { "labels": { "app": "insucar-api" } },
+              "spec": { "imagePullSecrets": [ { "name": "ecr-cred" } ],
+                "containers": [ { "name": "insucar-api", "image": "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:1",
+                  "env": [ { "name": "DATABASE_URL", "value": "postgres://postgres:test@postgres:5432/insucar?sslmode=disable" } ],
+                  "ports": [ { "containerPort": 8080 } ],
+                  "readinessProbe": { "httpGet": { "path": "/healthz", "port": 8080 }, "initialDelaySeconds": 5, "periodSeconds": 5 } } ] } } } },
+        { "apiVersion": "v1", "kind": "Service", "metadata": { "name": "insucar-api", "namespace": "insucar" },
+          "spec": { "type": "LoadBalancer", "selector": { "app": "insucar-api" }, "ports": [ { "port": 80, "targetPort": 8080 } ] } }
+      ]
+    }
+  ]
+}

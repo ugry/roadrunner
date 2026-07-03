@@ -62,3 +62,13 @@ Last updated: 2026-07-03
 - Not yet built/deployed (per full design): Amazon Connect telephony + Lex, Keycloak SSO, Rust
   inner-core vault, Pinpoint SMS, TLS/HTTPS (ACM+ALB), quorum HA Postgres (Patroni), multi-cloud.
 - Auth/TLS not configured on Jenkins/Spinnaker (open via LB) — fine for demo, harden before real use.
+
+## CI/CD end-to-end proven (2026-07-03)
+- Created ECR repo insucar-api; built+pushed image :1.
+- Fixed Spinnaker k8s account: clouddriver crash on 'raw-resources-endpoint-config' bind bug
+  (spinnaker/spinnaker#6840, found via exa.ai) -> added empty kindExpressions/omitKindExpressions.
+  Also injected a cluster-admin SA kubeconfig via operator files -> account 'insucar-eks' registered.
+- Deployed Postgres (schema+seed) to ns 'insucar' on EKS.
+- Spinnaker application 'insucar' + pipeline 'deploy-insucar-api' (deployManifest) created and RUN:
+  status SUCCEEDED. App deployed to EKS (2/2 pods), LoadBalancer serving.
+- App on EKS (deployed by Spinnaker): http://af9269372141a4fdba7953b3679d6189-59590199.eu-west-1.elb.amazonaws.com/  (healthz OK; /api/lookup returns real data)

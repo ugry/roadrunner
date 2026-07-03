@@ -1,0 +1,19 @@
+# Applied to the SpinnakerService to enable the in-cluster Kubernetes deploy account.
+# NOTE: files.kubeconfig-insucar (a cluster-admin SA kubeconfig) is injected at apply time, not committed.
+# The rawResourcesEndpointConfig empty lists work around spinnaker/spinnaker#6840 (clouddriver bind bug).
+spec:
+  spinnakerConfig:
+    config:
+      providers:
+        kubernetes:
+          enabled: true
+          primaryAccount: insucar-eks
+          accounts:
+            - name: insucar-eks
+              providerVersion: V2
+              kubeconfigFile: kubeconfig-insucar
+              onlySpinnakerManaged: false
+              namespaces: [ insucar ]
+              rawResourcesEndpointConfig:
+                kindExpressions: []
+                omitKindExpressions: []
