@@ -58,9 +58,14 @@ auto-initiates an outbound callback and the case survives reconnection.
   Connect stays swappable. Multi-region for DR (see Reliability).
 - Auth: Keycloak brokering OIDC, OAuth2, SAML/SSO, Kerberos (SPNEGO), Windows domain/AD (LDAP).
   RBAC roles: operator, supervisor, admin, ops, product_owner.
-- Platform: Kubernetes; Terraform (all resources as IaC); ArgoCD (GitOps, self-healing/drift
-  correction) + Argo Rollouts (canary/blue-green) + explicit manual approval gate. (Spinnaker is
-  the phase-2 option only if multi-cloud push orchestration justifies its heavier footprint.)
+- Platform: Kubernetes; Terraform (all resources as IaC). CD tool is SPINNAKER (MANDATORY) —
+  pipeline-driven delivery with first-class manual judgment stages for approvals, native
+  multi-cloud/multi-account deploy targets, and built-in canary / red-black (blue-green)
+  strategies. See the dedicated "Continuous Delivery (Spinnaker)" section. NOTE the tradeoffs the
+  agent must compensate for: Spinnaker is push-based (no GitOps self-healing), so drift is caught
+  separately via Terraform plan/drift-detection on a schedule; and it has a heavy operational
+  footprint (Halyard/Operator + Clouddriver/Orca/Gate/Deck/Front50/Rosco + external Redis/S3),
+  so provisioning Spinnaker is an explicit, budgeted build step.
 - Observability: Prometheus + Loki + Grafana + Alertmanager; OpenTelemetry traces/metrics; on-call
   paging (PagerDuty/Opsgenie).
 - Primary cloud AWS; everything except Connect is containerized + IaC-portable. FULL PHASE-1
@@ -71,7 +76,8 @@ auto-initiates an outbound callback and the case survives reconnection.
   secrets, networks, KMS keys.
 - UAT and production are byte-for-byte identical (shared IaC/Helm base; only secrets/scale differ;
   drift-checked). UAT is treated as PRE-PRODUCTION.
-- Promotion: dev -> UAT -> prod via GitOps PRs + Argo manual approval gate. No direct-to-prod path.
+- Promotion: dev -> UAT -> prod via Spinnaker pipelines with manual judgment stages (+ Git PR
+  review before artifact bake). No direct-to-prod path.
 
 ## IAM & access control (three security-group cases — MANDATORY)
 Case 1 — Developers (group `insucar-developers`):
@@ -97,8 +103,9 @@ Case 3 — Production (groups `insucar-devops-prod-readonly` and `insucar-prod-b
   Fabric) or, at minimum, a Merkle/SHA-256 hash-chained append-only ledger with periodic external
   anchoring; independently verifiable, append-only, no deletes/edits. Revocation and expiry are
   also written as new immutable entries.
-- Enforcement: IAM permission boundaries per group; STS session limits; ArgoCD RBAC + sync
-  windows; all elevation/approval/execution/expiry events also mirrored to auth.log.
+- Enforcement: IAM permission boundaries per group; STS session limits; Spinnaker RBAC + manual
+  judgment stages restricting who can promote to prod; all elevation/approval/execution/expiry
+  events also mirrored to auth.log.
 
 ## Change & release management (separation of duties)
 - Roles (distinct identities): Requester (PR + change ticket + test evidence + rollback plan);
@@ -211,9 +218,58 @@ customer, case *—* provider_mission; reference data (make/model catalog).
   Test-data seeding/management; race detector (Go) + fuzzing on webhook/IVR payload parsers.
 
 ## CI/CD & progressive delivery
-- Build -> test -> scan (SAST/SCA/secret/container) -> SBOM + cosign sign -> deploy via ArgoCD.
-- Argo Rollouts for canary/blue-green + automated analysis; feature flags for progressive delivery
-  and safe rollback. Manual approval gate before prod (product-owner-gated).
+- CI (build -> test -> scan SAST/SCA/secret/container -> SBOM + cosign sign -> publish image)
+  triggers a SPINNAKER pipeline. Spinnaker stages: bake (Helm/manifest) -> deploy dev -> automated
+  tests -> manual judgment -> deploy UAT -> canary/red-black analysis -> manual judgment
+  (product-owner-gated) -> deploy prod. Feature flags for progressive delivery and safe rollback.
+
+## Continuous Delivery (Spinnaker) — MANDATORY
+- Spinnaker is the delivery control plane for all three tiers. Install via Halyard or the
+  Spinnaker Operator on the platform cluster; persist config in Front50 (S3) with external Redis.
+- Deploy targets: register dev, UAT, and prod as SEPARATE Spinnaker accounts (native
+  multi-account/multi-cloud) so a single pipeline can promote across the isolated AWS accounts.
+- Pipeline shape (per service): trigger (CI image published / git tag) -> bake (Helm/Kustomize
+  manifest) -> deploy dev -> automated integration/e2e tests -> MANUAL JUDGMENT -> deploy UAT
+  (pre-prod) -> canary or red-black analysis (Kayenta automated canary analysis where feasible)
+  -> MANUAL JUDGMENT restricted to product_owner role -> deploy prod -> post-deploy smoke +
+  health verification -> auto-rollback on failure.
+- Separation of duties: Requester triggers the pipeline; Approver/product_owner clears the manual
+  judgment stage; Executor is Spinnaker itself acting under a time-bound, JIT-elevated role. The
+  prod deploy stage assumes the prod role only for the change window; the grant is written to the
+  immutable blockchain ledger and mirrored to auth.log (who/when/why/approver/expiry).
+- Notifications: Spinnaker stage events (awaiting judgment, deployed, rolled back) go to the
+  ops channel + PagerDuty.
+- Drift compensation (because Spinnaker is push-based, not GitOps): a scheduled `terraform plan`
+  drift-detection job + Kubernetes config audit alerts on out-of-band changes to prod.
+- Rollback: red-black gives instant traffic cutback to the previous server group; keep N-1
+  enabled for fast revert.
+
+## First working prototype (walking skeleton) — build this THIN PATH first
+Prove integration end-to-end before breadth. The first working prototype is the minimal vertical
+slice, MOCK-FIRST (no external accounts needed), runnable locally on k3d/minikube:
+1. Mock telephony adapter (HTTP endpoint emitting Connect-shaped events) -> a "Simulate incoming
+   call" button in the console is the default path; live Amazon Connect is a later enhancement.
+2. Screen-pop transport: mock adapter -> BFF -> operator console over a WebSocket channel
+   (define event names: `call.ringing`, `call.answered` with the screen-pop contract payload,
+   `dispatch.updated`). This transport must exist for BOTH mock and live paths.
+3. Seeded demo data (deterministic): >=3 customers each with policy + vehicle covering the demo
+   incident types (won't-start, accident, driver-ill); >=2 mock tow providers with
+   availability_calendar + performance_score; a demo operator, supervisor, and product_owner user.
+4. Mock tow connector + a simple ETA simulator: moves a point along a route toward the caller and
+   emits shrinking-ETA `dispatch.updated` events; map uses Leaflet + OpenStreetMap tiles (free) or
+   a keyed provider if supplied.
+5. Mock notification service: logs the tokenized status link (and driver name/plate/photo) to
+   system.log and a demo inbox view instead of sending real SMS.
+6. Keycloak realm seed: realm `insucar`, OIDC client for the console + BFF, seeded users/roles
+   (operator/supervisor/product_owner) so login works out of the box.
+7. Local secrets: dev uses a `.env` / sealed-secrets stub (NOT AWS Secrets Manager) so the
+   skeleton runs offline; the AWS Secrets Manager path activates in UAT/prod.
+8. One-command bootstrap: a `make dev-up` (or `taskfile`) that starts Postgres/PostGIS + Redis +
+   Keycloak + services + console on k3d, runs migrations, and loads seed data. Document env vars
+   and a `make demo-reset` to restore deterministic state for a repeatable demo.
+9. Smoke test that DEFINES "working": simulate a call -> assert screen-pop payload lands in the
+   console -> click dispatch -> assert ETA events flow -> assert status link logged -> assert
+   auth/system/error entries appear in Loki. This smoke test is the prototype's acceptance probe.
 
 ## Prerequisites (supervisor's responsibility to confirm/provide BEFORE build)
 - AWS Organizations with (at least) dev/UAT/prod accounts; bootstrap admin for first setup only.
@@ -236,8 +292,8 @@ customer, case *—* provider_mission; reference data (make/model catalog).
 7. Live ETA map + tokenized customer SMS status link (real or mock).
 8. Grafana: separated auth/system/error logs + call/dispatch business KPIs (time-to-dispatch,
    time-to-arrival, dispatch-success, abandonment, FCR).
-9. IaC repo (3 separate accounts) + ArgoCD/Argo Rollouts pipelines dev/UAT + documented promotion,
-   change management, and the 3-case IAM model.
+9. IaC repo (3 separate accounts) + Spinnaker pipelines (dev/UAT + prod-gated) with manual judgment
+   stages + documented promotion, change management, and the 3-case IAM model.
 10. IMMUTABLE prod-access blockchain ledger + demo of a recorded, product-owner-approved grant.
 11. Testing suite (unit/integration/contract/e2e) + backup/restore + telephony-DR runbooks.
 12. Demo script + architecture one-pager.
@@ -245,18 +301,24 @@ customer, case *—* provider_mission; reference data (make/model catalog).
 ## Build order
 0. (Ops) Confirm prerequisites + fresh least-privilege creds. If teardown requested: inventory all
    regions -> supervisor approval -> scoped teardown. NEVER use exposed keys; log every deletion.
-1. Repo scaffold + local dev (k3d/minikube) + CI + Terraform (dev account) + ArgoCD.
-2. Postgres/PostGIS seeded (with relationships) + Keycloak SSO + console shell.
-3. Go core services + Go BFF (+ generated TS types).
-4. Rust inner-core vault (KMS + SHA-256 chained ledger, NetworkPolicy-isolated).
-5. Provider connector layer + mock tow connector + fallback chain + admin key-in-vault.
-6. Live ETA map + tokenized SMS status link + driver-trust display.
-7. Telephony: Connect contact flow + Lex + softphone + screen-pop + call-drop callback + PSAP
-   transfer (or mock adapter).
-8. IAM 3-case groups + JIT break-glass + prod-access blockchain ledger + product-owner approval.
-9. Separated logging -> Loki + Grafana (logs + business KPIs); UAT account + promotion via Argo
-   manual gate; backup/restore + telephony-DR runbooks; testing suite green.
-10. Demo script + architecture one-pager; full hero-scenario rehearsal (incl. call-drop recovery).
+1. Repo scaffold + local dev (k3d/minikube) + CI + Terraform (dev account) + `make dev-up`
+   one-command bootstrap. (Spinnaker stood up in step 10; local iteration uses Helm/kubectl.)
+2. WALKING SKELETON (mock-first vertical slice): mock telephony adapter + WebSocket screen-pop
+   transport + seeded demo data + Keycloak realm seed + mock tow connector + ETA simulator + mock
+   notification. Make the prototype SMOKE TEST green (simulate call -> screen-pop -> dispatch ->
+   ETA -> status link -> logs in Loki). This is the first working prototype.
+3. Postgres/PostGIS relationships hardened + console shell fleshed out.
+4. Go core services + Go BFF (+ generated TS types).
+5. Rust inner-core vault (KMS + SHA-256 chained ledger, NetworkPolicy-isolated).
+6. Provider connector layer + fallback chain + admin key-in-vault (real-connector interface).
+7. Live ETA map + tokenized SMS status link + driver-trust display.
+8. Telephony: real Connect contact flow + Lex + softphone + screen-pop + call-drop callback + PSAP
+   transfer (swap the mock adapter for live, same transport).
+9. IAM 3-case groups + JIT break-glass + prod-access blockchain ledger + product-owner approval.
+10. Stand up SPINNAKER (Halyard/Operator) + register dev/UAT/prod accounts + pipelines with manual
+    judgment gates; separated logging -> Loki + Grafana (logs + business KPIs); UAT account +
+    promotion via Spinnaker manual gate; backup/restore + telephony-DR runbooks; testing suite green.
+11. Demo script + architecture one-pager; full hero-scenario rehearsal (incl. call-drop recovery).
 
 ## Acceptance criteria
 - Hero scenario runs live end-to-end (live Connect number or mock adapter); screen-pop pre-fills;
@@ -268,9 +330,10 @@ customer, case *—* provider_mission; reference data (make/model catalog).
 - Every production access grant appears in the immutable blockchain ledger (who/when/why/approver)
   and is mirrored to auth.log.
 - auth/system/error logs separated in Grafana; Rust vault network-isolated; business KPIs visible.
-- All infra is IaC across 3 accounts; UAT->prod promotion works via manual approval; no secrets in
-  code/logs; SBOM + signed images produced.
-- Testing suite passes; backup/restore and telephony-DR runbooks demonstrated.
+- All infra is IaC across 3 accounts; UAT->prod promotion works via a Spinnaker manual judgment
+  stage; no secrets in code/logs; SBOM + signed images produced.
+- Testing suite passes; the walking-skeleton smoke test is green and `make demo-reset` restores a
+  repeatable demo; backup/restore and telephony-DR runbooks demonstrated.
 
 ## Guardrails
 - Read/inspect before modifying. No destructive action without approval + inventory (except
