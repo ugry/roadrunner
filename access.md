@@ -81,3 +81,9 @@ Last updated: 2026-07-03
 - [ ] GitHub PAT (regenerate; update `github-pat` k8s secret)
 - [ ] Jenkins admin password
 - [ ] Add auth (OIDC) + TLS + LB restrictions to Jenkins and Spinnaker
+
+## EKS app (deployed by Spinnaker)
+- insucar-api URL: http://af9269372141a4fdba7953b3679d6189-59590199.eu-west-1.elb.amazonaws.com/   (health: /healthz ; lookup: /api/lookup?phone=%2B33600000001 ; operator: /ops-console-7f3a9c)
+- Namespace: insucar (Deployment insucar-api x2 + Postgres with schema+seed)
+- ECR image: 326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:1
+- Spinnaker app/pipeline: insucar / deploy-insucar-api (deployManifest, account insucar-eks)
