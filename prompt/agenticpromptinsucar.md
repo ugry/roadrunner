@@ -202,6 +202,22 @@ resolution, GDPR meta; derived-but-overridable priority/required_service/covered
 Add explicit ENTITY RELATIONSHIPS: customer 1—* policy, policy 1—* vehicle, incident/case *—1
 customer, case *—* provider_mission; reference data (make/model catalog).
 
+## End-user registration & self-service (customer-facing)
+- Customers self-register (name, email, phone in E.164, preferred language, country) via web/app.
+  Auth is delegated to a Keycloak CUSTOMER realm (OIDC); a `password_hash` column exists only for
+  dev/offline fallback. Store the Keycloak `sub` on the customer record.
+- Verification: email + phone one-time tokens (store token HASH only, with expiry). Phone
+  verification matters because the phone number is the ANI lookup anchor during an emergency call.
+- Registration captures GDPR consents (terms, privacy, call_recording, marketing opt-in) as
+  immutable consent rows with lawful_basis + text hash + ip/user-agent.
+- Post-registration the customer adds VEHICLES (plate, make/model, fuel incl. EV, category) and
+  links/holds a POLICY; a policy may cover multiple vehicles. This is what makes the operator
+  screen-pop pre-fill work (ANI -> customer -> policy + vehicles).
+- Self-service: view/update profile, manage vehicles, view policy/entitlements, see case history
+  and live status of an active incident. Right-to-erasure request is exposed here.
+- Data model is realised in `db/schema.sql` (customers, verification_tokens, consents, policies,
+  policy_territories, policy_entitlements, vehicles, policy_vehicles, ...).
+
 ## Operator workflow additions
 - Screen-pop miss / unknown caller / third-party reporter: manual case-create + search by
   plate/name/policy.
@@ -322,7 +338,10 @@ account) so node-failover is exercised from day one:
    routing, call-drop callback.
 3. Provider integration layer + admin connector registry + at least one REAL tow connector
    (live sandbox/API) + fallback chain.
-4. Go backend services + Go BFF (generated TS types) + real-seeded Postgres/PostGIS (relationships).
+4. Go backend services + Go BFF (generated TS types) + Postgres/PostGIS from `db/schema.sql` +
+   `db/seed.sql` real-shaped seed (entity relationships enforced by FKs).
+4b. Customer registration & self-service portal: signup + email/phone verification + consent
+    capture (Keycloak customer realm) + manage vehicles/policy + view case status/history.
 5. Rust inner-core vault (KMS envelope encryption + SHA-256-chained audit ledger, network-isolated).
 6. Keycloak SSO (OIDC/OAuth/SAML/Kerberos/AD) with RBAC incl. product_owner.
 7. Live ETA map + tokenized customer SMS status link via Amazon Pinpoint (real).
