@@ -161,3 +161,9 @@ Current app LB: (see `kubectl -n insucar get svc insucar-api`)
   unysolar.com / app.unysolar.com / op.unysolar.com. Auto-renews.
 - Port 80 only 308-redirects to 443 (force-ssl-redirect). insucar-api svc is now ClusterIP
   (only the ingress LB is public). Ingress LB is the Route53 alias target for all 3 hosts.
+
+## Landing pages (updated)
+- https://unysolar.com/       -> premium marketing landing (Open Design "Stripe" system, golden-ratio/Fibonacci)
+- https://unysolar.com/app    -> functional user app (login/register + request assistance + my cases)
+- https://op.unysolar.com/    -> operator console (unchanged)
+- Brand logo assets: design/insucar-logo.svg (lockup) + design/insucar-mark.svg (compact)
