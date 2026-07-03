@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 356 96" role="img" aria-label="Insucar">
+  <!-- Insucar logo lockup. Geometry on the golden ratio (phi = 1.618).
+       Mark box 80x80; wordmark baseline set on phi grid; clear-space = 21px (Fibonacci). -->
+  <defs>
+    <linearGradient id="ic-shield" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12a06f"/>
+      <stop offset="1" stop-color="#0a7d5a"/>
+    </linearGradient>
+    <linearGradient id="ic-road" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".95"/>
+    </linearGradient>
+  </defs>
+
+  <!-- MARK: shield (protection) + road/route + arriving pin -->
+  <g transform="translate(8,8)">
+    <!-- shield, golden-rectangle inspired crest -->
+    <path d="M40 2 L74 14 V40 C74 58 60 70 40 78 C20 70 6 58 6 40 V14 Z"
+          fill="url(#ic-shield)"/>
+    <path d="M40 2 L74 14 V40 C74 58 60 70 40 78 C20 70 6 58 6 40 V14 Z"
+          fill="none" stroke="#0b1f2a" stroke-opacity=".12" stroke-width="2"/>
+
+    <!-- road: converging perspective lane rising to the golden point -->
+    <path d="M22 64 L36 24 H44 L58 64 Z" fill="url(#ic-road)" opacity=".95"/>
+    <!-- lane dashes -->
+    <g fill="#0a7d5a">
+      <rect x="38.2" y="52" width="3.6" height="7" rx="1.2"/>
+      <rect x="38.6" y="41" width="2.8" height="6" rx="1.1"/>
+      <rect x="39" y="32" width="2" height="5" rx="1"/>
+    </g>
+
+    <!-- arriving location pin / spark at the crest (golden focal point) -->
+    <g transform="translate(40,22)">
+      <path d="M0 -13 C7.2 -13 12 -8.2 12 -1.6 C12 6 0 15 0 15 C0 15 -12 6 -12 -1.6 C-12 -8.2 -7.2 -13 0 -13 Z"
+            fill="#f5a623" stroke="#0b1f2a" stroke-opacity=".18" stroke-width="1.5"/>
+      <circle cy="-1.6" r="4.4" fill="#0b1f2a"/>
+    </g>
+  </g>
+
+  <!-- WORDMARK -->
+  <text x="102" y="60" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="42"
+        font-weight="800" letter-spacing="-1.2">
+    <tspan fill="#0b1f2a">Insu</tspan><tspan fill="#0a7d5a">car</tspan>
+  </text>
+  <text x="104" y="79" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5"
+        font-weight="600" letter-spacing="3.2" fill="#5b7183">ROADSIDE &amp; MOBILITY</text>
+</svg>
