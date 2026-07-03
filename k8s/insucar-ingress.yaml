@@ -12,11 +12,18 @@ spec:
   tls:
     - hosts:
         - unysolar.com
+        - www.unysolar.com
         - app.unysolar.com
         - op.unysolar.com
       secretName: insucar-tls
   rules:
     - host: unysolar.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: insucar-api, port: { number: 80 } } }
+    - host: www.unysolar.com
       http:
         paths:
           - path: /
