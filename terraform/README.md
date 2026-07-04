@@ -28,6 +28,22 @@ terraform workspace new uat   && terraform apply -var environment=uat
 terraform workspace new prod  && terraform apply -var environment=prod -var single_nat_gateway=false
 ```
 
+## Remote state bootstrap (once per account, before `terraform init`)
+The S3 backend in `versions.tf` needs its bucket + lock table to exist first
+(they can't be managed by the state they store). Create them once:
+```
+aws s3api create-bucket --bucket insucar-tfstate-326804802908 \
+  --region eu-west-1 --create-bucket-configuration LocationConstraint=eu-west-1
+aws s3api put-bucket-versioning --bucket insucar-tfstate-326804802908 \
+  --versioning-configuration Status=Enabled
+aws dynamodb create-table --table-name insucar-tf-lock \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST \
+  --region eu-west-1
+```
+Then `terraform init` will migrate/enable the backend. Per-tier separation uses
+workspaces (state keyed under `env:/<workspace>/insucar/terraform.tfstate`).
+
 ## Usage
 ```
 cd terraform

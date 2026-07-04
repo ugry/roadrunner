@@ -29,3 +29,18 @@ func TestGetenvDefault(t *testing.T) {
 		t.Fatalf("getenv should return fallback")
 	}
 }
+
+func TestRoleFromGroups(t *testing.T) {
+	if got := roleFromGroups([]string{"operator"}); got != "agent" {
+		t.Fatalf("operator -> agent, got %q", got)
+	}
+	if got := roleFromGroups([]string{"product_owner", "ops"}); got != "agent" {
+		t.Fatalf("staff group -> agent, got %q", got)
+	}
+	if got := roleFromGroups([]string{"customers"}); got != "user" {
+		t.Fatalf("non-staff -> user, got %q", got)
+	}
+	if got := roleFromGroups(nil); got != "user" {
+		t.Fatalf("nil -> user, got %q", got)
+	}
+}

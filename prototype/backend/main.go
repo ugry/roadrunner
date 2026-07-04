@@ -51,6 +51,14 @@ func main() {
 	log.Println("connected to database")
 	if cfg, e := awscfg.LoadDefaultConfig(context.Background()); e == nil {
 		snsClient = sns.NewFromConfig(cfg)
+		initEvents(cfg)
+	}
+	initRedis()
+	cognito = newCognitoVerifier()
+	if cognito != nil {
+		if err := cognito.refresh(context.Background()); err != nil {
+			log.Printf("cognito jwks prefetch failed (will retry lazily): %v", err)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -80,7 +88,8 @@ func main() {
 	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc(opsPath, serveFile("operator.html"))
 
-	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v)", opsPath, providerURL, snsClient != nil)
+	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v)",
+		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil)
 	log.Fatal(http.ListenAndServe(":8080", logMW(mux)))
 }
 
@@ -167,6 +176,16 @@ func currentSession(r *http.Request) (role, id, name string, ok bool) {
 }
 func requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Prefer Amazon Cognito bearer tokens (managed auth); fall back to the
+		// demo HMAC cookie session so the prototype still works without Cognito.
+		if id, ok := bearerIdentity(r); ok {
+			if roleFromGroups(id.Groups) == role {
+				next(w, r)
+				return
+			}
+			writeJSON(w, 403, map[string]string{"error": "forbidden"})
+			return
+		}
 		rl, _, _, ok := currentSession(r)
 		if !ok || rl != role {
 			writeJSON(w, 401, map[string]string{"error": "unauthorized"})
@@ -180,6 +199,10 @@ func requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if db.Ping(r.Context()) != nil {
 		writeJSON(w, 503, map[string]string{"status": "db_down"})
+		return
+	}
+	if !redisHealthy(r.Context()) {
+		writeJSON(w, 503, map[string]string{"status": "redis_down"})
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "ok"})
@@ -258,6 +281,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('customer.register',$1,$2)`,
 		in.Email, fmt.Sprintf(`{"customer_id":"%s"}`, id))
 	setSession(w, "user", id, in.First+" "+in.Last)
+	publishEvent(r.Context(), "customer.registered", map[string]any{"customer_id": id, "email": in.Email})
 	writeJSON(w, 201, map[string]string{"customer_id": id, "status": "active"})
 }
 
@@ -280,6 +304,7 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 		db.Exec(r.Context(), `INSERT INTO case_locations(case_id,address_text,capture_method) VALUES($1,$2,'app')`, cid, in.Address)
 	}
 	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'note',$2)`, cid, "customer submitted via app: "+in.Description)
+	publishEvent(r.Context(), "case.created", map[string]any{"case_id": cid, "case_number": caseNo, "incident": nz(in.Incident, "breakdown"), "customer_id": uid})
 	writeJSON(w, 201, map[string]string{"case_id": cid, "case_number": caseNo, "status": "triaging"})
 }
 
@@ -355,6 +380,17 @@ func handleAgentCase(w http.ResponseWriter, r *http.Request) {
 }
 
 func lookupByPhone(ctx context.Context, phone string) (map[string]any, string, string, bool) {
+	// Serve the screen-pop from ElastiCache when warm (short TTL).
+	cacheKey := "pop:" + phone
+	if b, ok := cacheGet(ctx, cacheKey); ok {
+		var m map[string]any
+		if json.Unmarshal(b, &m) == nil {
+			cust, _ := m["customer"].(map[string]any)
+			cid, _ := cust["id"].(string)
+			lang, _ := cust["language"].(string)
+			return m, cid, lang, true
+		}
+	}
 	row := db.QueryRow(ctx, `
 		SELECT c.id,c.first_name,c.last_name,c.preferred_language,c.country_code,
 		       p.policy_number,p.coverage::text,p.status::text,v.license_plate,v.make,v.model,v.fuel::text
@@ -366,11 +402,15 @@ func lookupByPhone(ctx context.Context, phone string) (map[string]any, string, s
 	if row.Scan(&cid, &fn, &ln, &lang, &country, &pol, &cov, &pstat, &plate, &mk, &model, &fuel) != nil {
 		return nil, "", "", false
 	}
-	return map[string]any{
+	m := map[string]any{
 		"customer": map[string]any{"id": s(cid), "first_name": s(fn), "last_name": s(ln), "language": s(lang), "country": s(country)},
 		"policy":   map[string]any{"policy_number": s(pol), "coverage": s(cov), "status": s(pstat)},
 		"vehicle":  map[string]any{"plate": s(plate), "make": s(mk), "model": s(model), "fuel": s(fuel)},
-	}, s(cid), s(lang), true
+	}
+	if b, err := json.Marshal(m); err == nil {
+		cacheSet(ctx, cacheKey, b, 60*time.Second)
+	}
+	return m, s(cid), s(lang), true
 }
 
 func handleLookup(w http.ResponseWriter, r *http.Request) {
@@ -401,6 +441,7 @@ func handleMockIncoming(w http.ResponseWriter, r *http.Request) {
 func handleDispatch(w http.ResponseWriter, r *http.Request) {
 	var in struct{ CaseID, Service string }
 	json.NewDecoder(r.Body).Decode(&in)
+	publishEvent(r.Context(), "case.dispatch.requested", map[string]any{"case_id": in.CaseID, "service": nz(in.Service, "tow_recovery")})
 	var provID, provName string
 	if db.QueryRow(r.Context(), `SELECT id,display_name FROM providers WHERE status='enabled' ORDER BY priority_rank ASC LIMIT 1`).
 		Scan(&provID, &provName) != nil {
@@ -431,6 +472,7 @@ func handleDispatch(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("dispatched %s ETA %d min", provName, eta))
 	link := statusBase + "/" + fmt.Sprintf("%d", time.Now().UnixNano())
 	smsStatus := sendSMS(r.Context(), in.CaseID, provName, "Pierre L.", "TOW-77-FR", eta, link)
+	publishEvent(r.Context(), "case.dispatched", map[string]any{"case_id": in.CaseID, "mission_id": mid, "provider": provName, "eta_minutes": eta, "source": src})
 	writeJSON(w, 201, map[string]any{"mission_id": mid, "provider": provName, "provider_source": src,
 		"eta_minutes": eta, "driver": map[string]string{"name": "Pierre L.", "plate": "TOW-77-FR"},
 		"status": "en_route", "status_link": link, "sms": smsStatus})
