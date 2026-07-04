@@ -137,6 +137,8 @@ resource "aws_cognito_user_pool_client" "partner_portal" {
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   allowed_oauth_flows_user_pool_client = true
   supported_identity_providers         = ["COGNITO"]
+  callback_urls                        = ["https://partners.unysolar.com/callback"]
+  logout_urls                          = ["https://partners.unysolar.com/"]
 }
 
 resource "aws_cognito_user_pool_domain" "partner" {

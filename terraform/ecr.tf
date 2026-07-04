@@ -1,5 +1,5 @@
 resource "aws_ecr_repository" "insucar_api" {
-  name                 = "insucar-api"
+  name                 = "insucar-${var.environment}-api"
   image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
@@ -7,7 +7,7 @@ resource "aws_ecr_repository" "insucar_api" {
 }
 
 resource "aws_ecr_repository" "insucar_worker" {
-  name                 = "insucar-worker"
+  name                 = "insucar-${var.environment}-worker"
   image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
@@ -40,11 +40,11 @@ resource "aws_ecr_lifecycle_policy" "insucar_api" {
 
 # S3 buckets used by the platform
 resource "aws_s3_bucket" "spinnaker" {
-  bucket = "insucar-spinnaker-${data.aws_caller_identity.current.account_id}"
+  bucket = "insucar-${var.environment}-spinnaker-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket" "deploy" {
-  bucket = "insucar-deploy-${data.aws_caller_identity.current.account_id}"
+  bucket = "insucar-${var.environment}-deploy-${data.aws_caller_identity.current.account_id}"
 }
 
 data "aws_caller_identity" "current" {}

@@ -55,7 +55,6 @@ module "eks" {
     coredns                = {}
     kube-proxy             = {}
     vpc-cni                = {}
-    aws-ebs-csi-driver     = {} # provides default StorageClass provisioning
     metrics-server         = {} # required for HPA
   }
 
@@ -92,6 +91,17 @@ module "irsa_ebs_csi" {
       namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
     }
   }
+}
+
+# EBS CSI driver addon — standalone (not in the EKS module's cluster_addons)
+# so it can be wired to its IRSA role without a module dependency cycle.
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name                = module.eks.cluster_name
+  addon_name                  = "aws-ebs-csi-driver"
+  service_account_role_arn    = module.irsa_ebs_csi.iam_role_arn
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+  depends_on                  = [module.eks]
 }
 
 module "irsa_cluster_autoscaler" {

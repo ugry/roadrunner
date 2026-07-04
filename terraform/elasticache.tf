@@ -38,7 +38,8 @@ resource "random_password" "redis_auth" {
 }
 
 resource "aws_secretsmanager_secret" "redis_auth" {
-  name = "insucar-${var.environment}-redis-auth"
+  name                    = "insucar-${var.environment}-redis-auth"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "redis_auth" {

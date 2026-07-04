@@ -49,8 +49,8 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_db_parameter_group" "this" {
-  name   = "insucar-${var.environment}-pg15"
-  family = "postgres15"
+  name   = "insucar-${var.environment}-pg16"
+  family = "postgres16"
 
   parameter {
     name  = "rds.force_ssl"
@@ -61,7 +61,7 @@ resource "aws_db_parameter_group" "this" {
 resource "aws_db_instance" "postgres" {
   identifier     = "insucar-${var.environment}"
   engine         = "postgres"
-  engine_version = "15.7"
+  engine_version = "16.9"
   instance_class = var.db_instance_class
 
   allocated_storage     = 50
