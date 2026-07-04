@@ -74,3 +74,9 @@ variable "redis_node_type" {
   type        = string
   default     = "cache.t4g.small"
 }
+
+variable "enable_grafana" {
+  description = "Create the Amazon Managed Grafana workspace. Requires IAM Identity Center (AWS_SSO) or a SAML IdP; keep false until one is configured. AMP is created regardless."
+  type        = bool
+  default     = false
+}
