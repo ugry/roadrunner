@@ -8,6 +8,25 @@ metadata:
   annotations:
     eks.amazonaws.com/role-arn: REPLACE_WITH_app_irsa_role_arn
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: insucar-config
+  namespace: insucar
+# Non-secret runtime config, populated from Terraform outputs (per environment).
+# Secrets (DATABASE_URL, REDIS_URL) live in the 'insucar-app' Secret instead.
+data:
+  AWS_REGION: "eu-west-1"
+  # `terraform output event_bus_name`
+  EVENT_BUS_NAME: "insucar-prod"
+  # `terraform output cognito_staff_issuer`
+  COGNITO_ISSUER: "https://cognito-idp.eu-west-1.amazonaws.com/REPLACE_staff_pool_id"
+  # comma-separated app client ids allowed to call the API
+  # (`terraform output cognito_spinnaker_client_id` + console/app client ids)
+  COGNITO_CLIENT_IDS: "REPLACE_client_ids"
+  PROVIDER_API_URL: "http://provider-axa.insucar.svc.cluster.local:5678"
+  STATUS_LINK_BASE: "https://app.unysolar.com/status"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: insucar-api, namespace: insucar, labels: { app: insucar-api } }
@@ -23,20 +42,15 @@ spec:
       containers:
         - name: insucar-api
           image: 326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:1
-          env:
-            # Managed data: DATABASE_URL points at Amazon RDS (Multi-AZ) and
-            # REDIS_URL at Amazon ElastiCache, both via the 'insucar-app' Secret.
-            # Create it from the Terraform outputs (rds_endpoint / redis_primary_endpoint
-            # + the RDS/Redis secrets), e.g.:
+          envFrom:
+            # Non-secret config (AWS_REGION, EVENT_BUS_NAME, COGNITO_*, PROVIDER_API_URL, STATUS_LINK_BASE)
+            - configMapRef: { name: insucar-config }
+            # Managed-service credentials: DATABASE_URL (RDS) + REDIS_URL (ElastiCache).
+            # Create from Terraform outputs, e.g.:
             #   kubectl -n insucar create secret generic insucar-app \
             #     --from-literal=DATABASE_URL="postgres://insucar_admin:<pw>@<rds-endpoint>:5432/insucar?sslmode=require" \
             #     --from-literal=REDIS_URL="rediss://:<auth>@<redis-endpoint>:6379"
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef: { name: insucar-app, key: DATABASE_URL }
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef: { name: insucar-app, key: REDIS_URL }
+            - secretRef: { name: insucar-app }
           ports: [ { containerPort: 8080 } ]
           resources:
             requests: { cpu: "100m", memory: "64Mi" }

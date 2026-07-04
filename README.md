@@ -214,7 +214,7 @@ judgment gates.
 
 DB apply (fresh):
 ```
-psql ... -f db/schema.sql -f db/seed.sql -f db/schema-v3-additions.sql
+psql ... -f db/schema.sql -f db/seed.sql -f db/schema-v3-additions.sql -f db/schema-v4-auth.sql -f db/schema-v5-cognito.sql
 ```
 
 ---

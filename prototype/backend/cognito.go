@@ -188,3 +188,99 @@ func roleFromGroups(groups []string) string {
 	}
 	return "user"
 }
+
+// ---------- unified caller identity (Cognito bearer OR demo cookie) ----------
+
+type ctxKey string
+
+const callerKey ctxKey = "insucar.caller"
+
+type caller struct {
+	Role string // "user" | "agent"
+	ID   string // customers.id / staff.id (app-native id)
+	Name string
+}
+
+func withCaller(r *http.Request, c *caller) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), callerKey, c))
+}
+
+func callerFrom(r *http.Request) (*caller, bool) {
+	c, ok := r.Context().Value(callerKey).(*caller)
+	return c, ok
+}
+
+// resolveCaller establishes identity from a Cognito bearer token (preferred,
+// mapping the token 'sub' to an app-native id) or the demo cookie session.
+func resolveCaller(r *http.Request) (*caller, bool) {
+	if id, ok := bearerIdentity(r); ok {
+		role := roleFromGroups(id.Groups)
+		c := &caller{Role: role, ID: id.Subject, Name: nzName(id.Username, id.Email)}
+		if role == "user" {
+			if cid, err := ensureCustomerFromCognito(r.Context(), id); err == nil {
+				c.ID = cid
+			}
+		} else {
+			var sid, dn string
+			if db.QueryRow(r.Context(), `SELECT id,display_name FROM staff WHERE cognito_subject=$1`, id.Subject).Scan(&sid, &dn) == nil {
+				c.ID, c.Name = sid, dn
+			}
+		}
+		return c, true
+	}
+	if role, id, name, ok := currentSession(r); ok {
+		return &caller{Role: role, ID: id, Name: name}, true
+	}
+	return nil, false
+}
+
+// ensureCustomerFromCognito links or JIT-provisions a customer for a Cognito sub.
+func ensureCustomerFromCognito(ctx context.Context, id *cognitoIdentity) (string, error) {
+	var cid string
+	if err := db.QueryRow(ctx, `SELECT id FROM customers WHERE cognito_subject=$1`, id.Subject).Scan(&cid); err == nil {
+		return cid, nil
+	}
+	// Link an existing (e.g. pre-registered) customer by email.
+	if id.Email != "" {
+		if err := db.QueryRow(ctx,
+			`UPDATE customers SET cognito_subject=$1, updated_at=now() WHERE email=$2 AND cognito_subject IS NULL RETURNING id`,
+			id.Subject, id.Email).Scan(&cid); err == nil {
+			return cid, nil
+		}
+	}
+	// Just-in-time provision a new customer on first Cognito login.
+	email := id.Email
+	if email == "" {
+		email = id.Subject + "@cognito.local"
+	}
+	first, last := splitName(id.Username, email)
+	err := db.QueryRow(ctx, `
+		INSERT INTO customers(email,first_name,last_name,status,email_verified,cognito_subject)
+		VALUES($1,$2,$3,'active',true,$4)
+		ON CONFLICT (email) DO UPDATE SET cognito_subject=EXCLUDED.cognito_subject, updated_at=now()
+		RETURNING id`, email, first, last, id.Subject).Scan(&cid)
+	return cid, err
+}
+
+func splitName(username, email string) (string, string) {
+	base := username
+	if base == "" {
+		base = strings.Split(email, "@")[0]
+	}
+	parts := strings.Fields(strings.ReplaceAll(base, ".", " "))
+	switch {
+	case len(parts) >= 2:
+		return parts[0], strings.Join(parts[1:], " ")
+	case len(parts) == 1:
+		return parts[0], ""
+	default:
+		return "user", ""
+	}
+}
+
+func nzName(username, email string) string {
+	if username != "" {
+		return username
+	}
+	return email
+}

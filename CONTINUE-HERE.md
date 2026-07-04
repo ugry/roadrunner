@@ -21,7 +21,7 @@ Last updated: 2026-07-03 (evening)
 - CI/CD on EKS PROVEN: git push -> Jenkins(Kaniko->ECR) -> Spinnaker webhook -> gated dev/UAT/prod.
 - Design + prompt: prompt/agenticpromptinsucar.md (v3 Redion-parity). Diagrams: prompt/*.svg|pdf,
   mermaidschemas/{current-deployed,planned-design}.svg. Terraform IaC: terraform/.
-- DB: db/schema.sql + seed.sql + schema-v3-additions(tenants/RLS) + schema-v4-auth + seed-users.
+- DB: db/schema.sql + seed.sql + schema-v3-additions(tenants/RLS) + schema-v4-auth + schema-v5-cognito(cognito_subject) + seed-users.
 - Brand: green #0a7d5a / navy #0b1f2a / amber #f5a623 / Inter. Logo: design/insucar-logo.svg + mark.
 - OLDER standalone prototype EC2 (i-0628af42823122bce) still exists (docker-compose) — superseded by EKS.
 

@@ -176,22 +176,17 @@ func currentSession(r *http.Request) (role, id, name string, ok bool) {
 }
 func requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Prefer Amazon Cognito bearer tokens (managed auth); fall back to the
-		// demo HMAC cookie session so the prototype still works without Cognito.
-		if id, ok := bearerIdentity(r); ok {
-			if roleFromGroups(id.Groups) == role {
-				next(w, r)
-				return
-			}
-			writeJSON(w, 403, map[string]string{"error": "forbidden"})
-			return
-		}
-		rl, _, _, ok := currentSession(r)
-		if !ok || rl != role {
+		// Identity from a Cognito Bearer token (managed auth) or the demo cookie.
+		c, ok := resolveCaller(r)
+		if !ok {
 			writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 			return
 		}
-		next(w, r)
+		if c.Role != role {
+			writeJSON(w, 403, map[string]string{"error": "forbidden"})
+			return
+		}
+		next(w, withCaller(r, c))
 	}
 }
 
@@ -249,12 +244,12 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMe(w http.ResponseWriter, r *http.Request) {
-	role, id, name, ok := currentSession(r)
+	c, ok := resolveCaller(r)
 	if !ok {
 		writeJSON(w, 200, map[string]any{"authenticated": false})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"authenticated": true, "role": role, "id": id, "name": name})
+	writeJSON(w, 200, map[string]any{"authenticated": true, "role": c.Role, "id": c.ID, "name": c.Name})
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -287,7 +282,10 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 // USER: submit an incident (creates a case for the logged-in customer)
 func handleUserIncident(w http.ResponseWriter, r *http.Request) {
-	_, uid, _, _ := currentSession(r)
+	uid := ""
+	if c, ok := callerFrom(r); ok {
+		uid = c.ID
+	}
 	var in struct{ Incident, Description, Address, Lat, Lng string }
 	json.NewDecoder(r.Body).Decode(&in)
 	caseNo := fmt.Sprintf("CASE-%d", time.Now().Unix())
@@ -310,7 +308,10 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 
 // USER: list own cases
 func handleUserCases(w http.ResponseWriter, r *http.Request) {
-	_, uid, _, _ := currentSession(r)
+	uid := ""
+	if c, ok := callerFrom(r); ok {
+		uid = c.ID
+	}
 	rows, _ := db.Query(r.Context(),
 		`SELECT case_number,status::text,incident::text,coalesce(symptom_description,''),created_at
 		 FROM cases WHERE customer_id=$1 ORDER BY created_at DESC`, uid)
