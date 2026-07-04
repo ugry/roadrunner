@@ -161,7 +161,7 @@
       "name": "Promote to UAT?",
       "refId": "2",
       "requisiteStageRefIds": [
-        "1"
+        "6"
       ],
       "type": "manualJudgment"
     },
@@ -296,7 +296,7 @@
       "name": "Promote to PROD? (product owner)",
       "refId": "4",
       "requisiteStageRefIds": [
-        "3"
+        "7"
       ],
       "type": "manualJudgment"
     },
@@ -420,6 +420,81 @@
       ],
       "source": "text",
       "type": "deployManifest"
+    },
+    {
+      "name": "Smoke test DEV",
+      "type": "webhook",
+      "refId": "6",
+      "requisiteStageRefIds": [
+        "1"
+      ],
+      "method": "GET",
+      "url": "http://insucar-api.insucar-dev.svc.cluster.local/healthz",
+      "waitForCompletion": true,
+      "failPipeline": true,
+      "continuePipeline": false
+    },
+    {
+      "name": "Smoke test UAT",
+      "type": "webhook",
+      "refId": "7",
+      "requisiteStageRefIds": [
+        "3"
+      ],
+      "method": "GET",
+      "url": "http://insucar-api.insucar-uat.svc.cluster.local/healthz",
+      "waitForCompletion": true,
+      "failPipeline": true,
+      "continuePipeline": false
+    },
+    {
+      "name": "Smoke test PROD",
+      "type": "webhook",
+      "refId": "8",
+      "requisiteStageRefIds": [
+        "5"
+      ],
+      "method": "GET",
+      "url": "https://op.unysolar.com/healthz",
+      "waitForCompletion": true,
+      "failPipeline": false,
+      "continuePipeline": true
+    },
+    {
+      "name": "Rollback PROD",
+      "type": "undoRolloutManifest",
+      "account": "insucar-eks",
+      "cloudProvider": "kubernetes",
+      "location": "insucar-prod",
+      "mode": "static",
+      "manifestName": "deployment insucar-api",
+      "numRevisionsBack": 1,
+      "refId": "9",
+      "requisiteStageRefIds": [
+        "8"
+      ],
+      "stageEnabled": {
+        "type": "expression",
+        "expression": "${ #stage('Smoke test PROD').status != 'SUCCEEDED' }"
+      }
+    },
+    {
+      "name": "Verify PROD health",
+      "type": "checkPreconditions",
+      "refId": "10",
+      "requisiteStageRefIds": [
+        "9"
+      ],
+      "failPipeline": true,
+      "preconditions": [
+        {
+          "type": "expression",
+          "failPipeline": true,
+          "context": {
+            "expression": "${ #stage('Smoke test PROD').status == 'SUCCEEDED' }"
+          }
+        }
+      ]
     }
   ],
   "triggers": [],
