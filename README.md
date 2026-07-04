@@ -6,7 +6,8 @@
 >
 > This README is the entry point. For deeper context read, in order:
 > `CONTINUE-HERE.md` (handoff), `build-notes.md` (decisions), `milestone.md` (history),
-> `access.md` (all live URLs + credentials), `prompt/agenticpromptinsucar.md` (the master spec).
+> `access.md` (all live URLs + credentials), `prompt/agenticpromptinsucar.md` (the master spec),
+> `ROLLOUT.md` (step-by-step apply/deploy runbook).
 >
 > **LIVE (HTTPS / Let's Encrypt):** users at **https://unysolar.com/** (landing) and
 > **/app** (login); operators at **https://op.unysolar.com/**. Logins in `access.md`.
