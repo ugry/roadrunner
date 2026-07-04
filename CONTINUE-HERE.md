@@ -5,6 +5,23 @@ Repo: https://github.com/ugry/insucar (private) · cloned locally at /tmp/insuca
 AWS: account 326804802908, region eu-west-1 · Domain: unysolar.com (Route53 zone Z06143773JJ0DPRILPDA0)
 Last updated: 2026-07-03 (evening)
 
+## Rollout attempt (dev) — BLOCKED on vCPU quota (2026-07-04)
+- Bootstrapped TF remote state: S3 `insucar-tfstate-326804802908` (versioned, AES256,
+  public-access-blocked) + DynamoDB `insucar-tf-lock`. These REMAIN (cheap, reusable).
+- `terraform apply` (workspace `dev`, `-var cluster_name=insucar-dev -var db_multi_az=false`)
+  built 124/143 resources cleanly (VPC, EKS control plane, RDS, ElastiCache, Cognito, IAM,
+  messaging, AMP). Plan gate was verified 0-to-destroy first (live cluster safe).
+- BLOCKER: EKS node group failed `VcpuLimitExceeded` — account On-Demand Standard vCPU quota
+  is **8**, fully consumed by the LIVE `insucar` cluster (2× t3.xlarge). No headroom for dev nodes.
+- Actions taken: requested Service Quota increase L-1216C47A 8 -> 32 (region eu-west-1, PENDING);
+  deleted the orphan node group; `terraform destroy` rolled back all 122 dev resources (cost stopped).
+  Live `insucar` + unysolar.com verified untouched (HTTP 200).
+- NEXT: once the quota is approved, re-run `terraform apply -var cluster_name=insucar-dev
+  -var db_multi_az=false` (dev workspace) and continue `ROLLOUT.md` §3+. Alternatively decommission
+  the old eksctl `insucar` cluster to free vCPUs, OR apply in a separate AWS account (the intended
+  3-tier design). Grafana is gated off (`enable_grafana=false`) until IAM Identity Center/SAML exists.
+
+
 ## TL;DR current state (LIVE)
 - LIVE over HTTPS (Let's Encrypt):
   * https://unysolar.com/  (+www) -> premium marketing landing (OD "stripe", golden-ratio); logo shield.
