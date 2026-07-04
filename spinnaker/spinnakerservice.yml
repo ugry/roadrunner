@@ -17,34 +17,37 @@ spec:
       features:
         pipelineTemplates: true
       # ------------------------------------------------------------------
-      # AuthN (OIDC) + AuthZ (fiat role-based). Replaces the prototype's
-      # "no auth / open to anyone with the URL" posture.
-      # Roles are sourced from the OIDC `groups` claim and drive:
+      # AuthN (OIDC via Amazon Cognito staff pool) + AuthZ (fiat role-based).
+      # Replaces the prototype's "no auth / open to anyone with the URL" posture.
+      # Roles are sourced from the Cognito `cognito:groups` claim and drive:
       #   - who can see/operate the app (account/application permissions)
       #   - who can approve a manualJudgment (stage `selectedStageRoles`)
+      # clientId / URLs come from Terraform outputs:
+      #   cognito_spinnaker_client_id, cognito_staff_domain, cognito_staff_issuer
       # The client secret is NOT stored here: it is referenced from a
       # Kubernetes secret via halyard's encrypted-secret syntax. Create it
-      # first:  kubectl -n spinnaker create secret generic spin-secrets \
-      #           --from-literal=oidc-client-secret=<SECRET>
+      # first (secret value = the Cognito app client secret):
+      #   kubectl -n spinnaker create secret generic spin-secrets \
+      #           --from-literal=oidc-client-secret=<COGNITO_APP_CLIENT_SECRET>
       # ------------------------------------------------------------------
       security:
         authn:
           oauth2:
             enabled: true
             client:
-              clientId: insucar-spinnaker
+              clientId: REPLACE_WITH_cognito_spinnaker_client_id
               clientSecret: encrypted:k8s!n:spin-secrets!k:oidc-client-secret
-              accessTokenUri: https://keycloak.unysolar.com/realms/staff/protocol/openid-connect/token
-              userAuthorizationUri: https://keycloak.unysolar.com/realms/staff/protocol/openid-connect/auth
-              userInfoUri: https://keycloak.unysolar.com/realms/staff/protocol/openid-connect/userinfo
-              scope: openid email profile groups
+              accessTokenUri: https://insucar-prod-staff.auth.eu-west-1.amazoncognito.com/oauth2/token
+              userAuthorizationUri: https://insucar-prod-staff.auth.eu-west-1.amazoncognito.com/oauth2/authorize
+              userInfoUri: https://insucar-prod-staff.auth.eu-west-1.amazoncognito.com/oauth2/userInfo
+              scope: openid email profile
             provider: OTHER
             userInfoMapping:
               email: email
               firstName: given_name
               lastName: family_name
-              username: preferred_username
-              roles: groups
+              username: username
+              roles: cognito:groups
         authz:
           enabled: true
           groupMembership:

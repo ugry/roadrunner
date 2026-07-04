@@ -9,15 +9,51 @@
 # ServiceAccounts with the role ARNs emitted in outputs.tf.
 ########################################
 
-# --- App (insucar-api): SNS SMS only -------------------------------------
+# --- App (insucar-api): runtime permissions for managed services ---------
 # aws_iam_policy.app_sns is declared in main.tf but was never attached.
-# Attach it here to a dedicated app role instead of the node role.
+# The app role now also covers EventBridge/SNS/SQS (messaging) and reading
+# the RDS/Redis credentials from Secrets Manager. Least-privilege, scoped to
+# this environment's resources.
+data "aws_iam_policy_document" "app_runtime" {
+  statement {
+    sid       = "PublishEvents"
+    actions   = ["events:PutEvents"]
+    resources = [aws_cloudwatch_event_bus.events.arn]
+  }
+  statement {
+    sid       = "SnsFanout"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.events.arn]
+  }
+  statement {
+    sid       = "SqsWork"
+    actions   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+    resources = [for q in aws_sqs_queue.work : q.arn]
+  }
+  statement {
+    sid       = "ReadRuntimeSecrets"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [
+      aws_db_instance.postgres.master_user_secret[0].secret_arn,
+      aws_secretsmanager_secret.redis_auth.arn,
+    ]
+  }
+}
+
+resource "aws_iam_policy" "app_runtime" {
+  name   = "${var.cluster_name}-${var.environment}-app-runtime"
+  policy = data.aws_iam_policy_document.app_runtime.json
+}
+
 module "irsa_app" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.44"
 
-  role_name        = "${var.cluster_name}-${var.environment}-app"
-  role_policy_arns = { sns = aws_iam_policy.app_sns.arn }
+  role_name = "${var.cluster_name}-${var.environment}-app"
+  role_policy_arns = {
+    sns     = aws_iam_policy.app_sns.arn     # SMS (Publish to phone numbers)
+    runtime = aws_iam_policy.app_runtime.arn # EventBridge/SNS/SQS/Secrets
+  }
 
   oidc_providers = {
     main = {

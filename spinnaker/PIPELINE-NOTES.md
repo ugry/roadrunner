@@ -28,10 +28,10 @@ Rolling update + smoke + auto-rollback (current) is a reasonable interim.
 ## Follow-up: Kayenta automated canary analysis — not yet wired
 Kayenta needs:
 - a canary judge service enabled in the SpinnakerService,
-- a metrics store (Prometheus — see the planned observability wiring),
+- a metrics store (Amazon Managed Service for Prometheus — see the planned observability wiring),
 - a canary config (baseline vs canary metric groups + scoring),
 - a `Canary Analysis` stage between UAT and PROD.
-Blocked on the Prometheus/Grafana observability stack being stood up first.
+Blocked on the Amazon Managed Prometheus / Managed Grafana observability stack being stood up first.
 
 ## Follow-up: parameterize namespace
 The three deploy stages duplicate one manifest across `insucar-dev/uat/prod`.

@@ -9,10 +9,16 @@ managed nodegroup with autoscaling, EBS CSI + Cluster Autoscaler IRSA, ECR, and 
 
 ## Layout
 - `versions.tf`   provider + (optional) S3 remote state
-- `variables.tf`  region, environment, cluster/node sizing (min2/desired2/max5)
+- `variables.tf`  region, environment, cluster/node sizing, RDS/Redis sizing, admin CIDRs
 - `main.tf`       VPC + EKS + nodegroup (HA, autoscaling tags) + addons + IRSA roles
 - `ecr.tf`        ECR repo (scan-on-push, lifecycle) + S3 buckets
-- `outputs.tf`    cluster endpoint, kubectl command, ECR URL, IRSA role ARNs
+- `iam.tf`        per-workload IRSA (app runtime, Spinnaker S3, CI ECR)
+- `iam-groups.tf` 3-case IAM (developers/operations/approvers) + JIT prod break-glass
+- `rds.tf`        Amazon RDS for PostgreSQL + PostGIS (Multi-AZ), managed master secret
+- `elasticache.tf` Amazon ElastiCache for Redis (Multi-AZ), auth token in Secrets Manager
+- `messaging.tf`  Amazon EventBridge bus + SNS topic + SQS work queues/DLQs
+- `cognito.tf`    Amazon Cognito user pools (customer/staff/partner) + clients + groups
+- `outputs.tf`    cluster endpoint, kubectl command, ECR URL, IRSA ARNs, RDS/Redis/Cognito refs
 
 ## Environments (3 tiers)
 Design: dev / uat / prod each in a SEPARATE AWS account. Use one workspace/state per account:
@@ -32,9 +38,13 @@ $(terraform output -raw configure_kubectl)
 ```
 
 ## What Terraform manages vs not
-- Manages: VPC, EKS control plane (AWS-managed internally), nodegroup, addons, IRSA, ECR, S3.
-- After apply, install the app layer with Helm/kubectl or Spinnaker: Jenkins, Spinnaker operator,
-  Postgres, insucar-api, HPA (see `ci/`, `spinnaker/`, `k8s/`).
+- Manages: VPC, EKS control plane (AWS-managed internally), nodegroup, addons, IRSA, ECR, S3,
+  **Amazon RDS (Multi-AZ), ElastiCache (Multi-AZ), EventBridge/SNS/SQS, and Cognito user pools** —
+  i.e. the fully-managed data/messaging/auth layers.
+- After apply, install the compute app layer with Helm/kubectl or Spinnaker: Jenkins, Spinnaker
+  operator, insucar-api, HPA (see `ci/`, `spinnaker/`, `k8s/`). Wire the app to the managed layers
+  via the `insucar-app` Secret (DATABASE_URL/REDIS_URL) and the Cognito/messaging outputs.
+- The in-cluster `k8s/postgres.yaml` is superseded by `rds.tf` (kept only for local/demo).
 - Control-plane internals (etcd/apiserver/scheduler/controller-manager) are AWS-managed; control
   plane logs are enabled here and shipped to CloudWatch.
 ```

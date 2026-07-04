@@ -68,3 +68,9 @@ variable "db_multi_az" {
   type        = bool
   default     = true
 }
+
+variable "redis_node_type" {
+  description = "ElastiCache Redis node type."
+  type        = string
+  default     = "cache.t4g.small"
+}

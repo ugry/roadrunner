@@ -1,3 +1,7 @@
+# DEPRECATED for managed deployments: this single-replica in-cluster Postgres
+# is a SPOF and is superseded by Amazon RDS Multi-AZ (see terraform/rds.tf).
+# Kept only for local/demo clusters without RDS. Do not use in UAT/prod —
+# point DATABASE_URL at the RDS endpoint via the 'insucar-app' Secret instead.
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: postgres, namespace: insucar, labels: { app: postgres } }

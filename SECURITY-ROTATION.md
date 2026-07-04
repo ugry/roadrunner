@@ -45,11 +45,13 @@ helm upgrade jenkins jenkins/jenkins -n jenkins -f ci/jenkins-values.yaml \
 ```
 
 ## 4. Add auth + TLS + LB lockdown to Jenkins and Spinnaker
-- Spinnaker: OIDC authn + fiat authz are now configured in
-  `spinnaker/spinnakerservice.yml`. Create the client secret first:
+- Spinnaker: OIDC authn (Amazon Cognito staff pool) + fiat authz are configured
+  in `spinnaker/spinnakerservice.yml`. Fill the clientId/domain from Terraform
+  outputs (`cognito_spinnaker_client_id`, `cognito_staff_domain`) and create the
+  client secret first (value = the Cognito app-client secret):
   ```
   kubectl -n spinnaker create secret generic spin-secrets \
-    --from-literal=oidc-client-secret=<SECRET>
+    --from-literal=oidc-client-secret=<COGNITO_APP_CLIENT_SECRET>
   ```
 - Jenkins: enable OIDC/SAML SSO (matrix-auth already installed) and set
   `controller.loadBalancerSourceRanges` in `ci/jenkins-values.yaml` to your
@@ -67,4 +69,6 @@ helm upgrade jenkins jenkins/jenkins -n jenkins -f ci/jenkins-values.yaml \
 ## 6. Follow-ups (tracked elsewhere)
 - Enable Terraform remote state + locking (`versions.tf` backend block).
 - 3-case IAM groups + JIT prod access — see `terraform/iam-groups.tf`.
-- Move the demo DB password (`postgres/test`) to a managed secret.
+- Retire the in-cluster `postgres` pod (`postgres/test`) in favour of Amazon RDS
+  Multi-AZ (`terraform/rds.tf`); the app reads DATABASE_URL/REDIS_URL from the
+  `insucar-app` Secret (RDS + ElastiCache managed credentials).
