@@ -83,6 +83,9 @@ func main() {
 	mux.HandleFunc("/api/agent/case", requireRole("agent", handleAgentCase))
 	mux.HandleFunc("/api/agent/lookup", requireRole("agent", handleLookup))
 	mux.HandleFunc("/api/agent/dispatch", requireRole("agent", handleDispatch))
+	mux.HandleFunc("/api/agent/providers", requireRole("agent", handleAgentProviders))
+	mux.HandleFunc("/api/agent/stats", requireRole("agent", handleAgentStats))
+	mux.HandleFunc("/api/agent/status", requireRole("agent", handleAgentStatus))
 
 	// auth config (Cognito setup exposed to frontends)
 	mux.HandleFunc("/api/auth/config", handleAuthConfig)
@@ -366,37 +369,75 @@ func handleAgentCases(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"cases": out})
 }
 
-// AGENT: case detail (customer + vehicle + latest mission)
+// AGENT: case detail (customer + vehicle + latest mission + coverage + timeline)
 func handleAgentCase(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	var no, st, pr, inc, desc, who, phone string
+	var createdAt time.Time
 	err := db.QueryRow(r.Context(), `
 		SELECT ca.case_number, ca.status::text, ca.priority::text, ca.incident::text, coalesce(ca.symptom_description,''),
-		       coalesce(c.first_name||' '||c.last_name,'(unknown)'), coalesce(c.phone_e164,'')
+		       coalesce(c.first_name||' '||c.last_name,'(unknown)'), coalesce(c.phone_e164,''), ca.created_at
 		FROM cases ca LEFT JOIN customers c ON c.id=ca.customer_id WHERE ca.id=$1`, id).
-		Scan(&no, &st, &pr, &inc, &desc, &who, &phone)
+		Scan(&no, &st, &pr, &inc, &desc, &who, &phone, &createdAt)
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
 	}
 	var plate, mk, model, pol, cov *string
+	var excess *float64
+	var calloutLimit *int
 	db.QueryRow(r.Context(), `
-		SELECT v.license_plate,v.make,v.model,p.policy_number,p.coverage::text
+		SELECT v.license_plate,v.make,v.model,p.policy_number,p.coverage::text,p.excess_amount,p.callout_limit
 		FROM cases ca JOIN customers c ON c.id=ca.customer_id
 		LEFT JOIN policies p ON p.customer_id=c.id
 		LEFT JOIN policy_vehicles pv ON pv.policy_id=p.id
 		LEFT JOIN vehicles v ON v.id=pv.vehicle_id WHERE ca.id=$1 LIMIT 1`, id).
-		Scan(&plate, &mk, &model, &pol, &cov)
+		Scan(&plate, &mk, &model, &pol, &cov, &excess, &calloutLimit)
 	var eta *int
 	var prov *string
-	db.QueryRow(r.Context(), `SELECT m.eta_minutes,p.display_name FROM missions m JOIN providers p ON p.id=m.provider_id
-		WHERE m.case_id=$1 ORDER BY m.created_at DESC LIMIT 1`, id).Scan(&eta, &prov)
+	var mid *string
+	db.QueryRow(r.Context(), `SELECT m.id,m.eta_minutes,p.display_name FROM missions m JOIN providers p ON p.id=m.provider_id
+		WHERE m.case_id=$1 ORDER BY m.created_at DESC LIMIT 1`, id).Scan(&mid, &eta, &prov)
+	// mission timeline events
+	var timeline []map[string]any
+	if mid != nil && *mid != "" {
+		trows, _ := db.Query(r.Context(),
+			`SELECT status::text, eta_minutes, occurred_at, coalesce(raw_status,status::text)
+			 FROM mission_status_events WHERE mission_id=$1 ORDER BY occurred_at ASC`, *mid)
+		defer trows.Close()
+		for trows.Next() {
+			var tStatus, rawStatus string
+			var tEta *int
+			var tOccurred time.Time
+			trows.Scan(&tStatus, &tEta, &tOccurred, &rawStatus)
+			timeline = append(timeline, map[string]any{
+				"status": tStatus, "eta_minutes": tEta,
+				"occurred_at": tOccurred, "label": rawStatus,
+			})
+		}
+	}
+	// case safety info
+	var safe, inTraffic, onShoulder, vulnerable, isDark *bool
+	var weather *string
+	db.QueryRow(r.Context(),
+		`SELECT is_everyone_safe,in_live_traffic,on_hard_shoulder,vulnerable_occupants,is_dark,weather::text
+		 FROM case_safety WHERE case_id=$1`, id).
+		Scan(&safe, &inTraffic, &onShoulder, &vulnerable, &isDark, &weather)
+
 	writeJSON(w, 200, map[string]any{
 		"case_number": no, "status": st, "priority": pr, "incident": inc, "description": desc,
-		"customer": who, "phone": phone,
-		"policy": map[string]any{"number": s(pol), "coverage": s(cov)},
+		"customer": who, "phone": phone, "created_at": createdAt,
+		"policy": map[string]any{
+			"number": s(pol), "coverage": s(cov),
+			"excess": excess, "callout_limit": calloutLimit,
+		},
 		"vehicle": map[string]any{"plate": s(plate), "make": s(mk), "model": s(model)},
-		"mission": map[string]any{"provider": s(prov), "eta_minutes": eta},
+		"mission": map[string]any{"id": s(mid), "provider": s(prov), "eta_minutes": eta, "timeline": timeline},
+		"safety": map[string]any{
+			"everyone_safe": safe, "in_live_traffic": inTraffic,
+			"on_hard_shoulder": onShoulder, "vulnerable_occupants": vulnerable,
+			"is_dark": isDark, "weather": weather,
+		},
 	})
 }
 
@@ -460,19 +501,30 @@ func handleMockIncoming(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDispatch(w http.ResponseWriter, r *http.Request) {
-	var in struct{ CaseID, Service string }
+	var in struct{ CaseID, Service, ProviderID string }
 	json.NewDecoder(r.Body).Decode(&in)
-	publishEvent(r.Context(), "case.dispatch.requested", map[string]any{"case_id": in.CaseID, "service": nz(in.Service, "tow_recovery")})
+	svc := nz(in.Service, "tow_recovery")
+	publishEvent(r.Context(), "case.dispatch.requested", map[string]any{"case_id": in.CaseID, "service": svc})
 	var provID, provName string
-	if db.QueryRow(r.Context(), `SELECT id,display_name FROM providers WHERE status='enabled' ORDER BY priority_rank ASC LIMIT 1`).
-		Scan(&provID, &provName) != nil {
-		writeJSON(w, 404, map[string]string{"error": "no provider available"})
-		return
+	// allow specific provider selection (fallback/manual), else auto-pick nearest
+	if in.ProviderID != "" {
+		err := db.QueryRow(r.Context(), `SELECT id,display_name FROM providers WHERE id=$1 AND status='enabled'`, in.ProviderID).
+			Scan(&provID, &provName)
+		if err != nil {
+			writeJSON(w, 404, map[string]string{"error": "provider not found"})
+			return
+		}
+	} else {
+		if db.QueryRow(r.Context(), `SELECT id,display_name FROM providers WHERE status='enabled' ORDER BY priority_rank ASC LIMIT 1`).
+			Scan(&provID, &provName) != nil {
+			writeJSON(w, 404, map[string]string{"error": "no provider available"})
+			return
+		}
 	}
 	src := "internal"
 	eta := 18 + rand.Intn(25)
 	if providerURL != "" {
-		if pe, ok := callProvider(r.Context(), in.CaseID, nz(in.Service, "tow_recovery")); ok {
+		if pe, ok := callProvider(r.Context(), in.CaseID, svc); ok {
 			src = "api"
 			if pe > 0 {
 				eta = pe
@@ -483,20 +535,133 @@ func handleDispatch(w http.ResponseWriter, r *http.Request) {
 	if db.QueryRow(r.Context(),
 		`INSERT INTO missions(case_id,provider_id,service,source,status,eta_minutes)
 		 VALUES($1,$2,$3,$4,'en_route',$5) RETURNING id`,
-		in.CaseID, provID, nz(in.Service, "tow_recovery"), src, eta).Scan(&mid) != nil {
+		in.CaseID, provID, svc, src, eta).Scan(&mid) != nil {
 		writeJSON(w, 400, map[string]string{"error": "dispatch failed"})
 		return
 	}
-	db.Exec(r.Context(), `INSERT INTO mission_driver(mission_id,driver_name,vehicle_plate) VALUES($1,'Pierre L.','TOW-77-FR')`, mid)
+	// add mission status event for timeline
+	db.Exec(r.Context(),
+		`INSERT INTO mission_status_events(mission_id,status,eta_minutes,occurred_at)
+		 VALUES($1,'en_route',$2,now())`, mid, eta)
+	// use real driver from DB or fallback
+	var drvName, drvPlate string
+	if db.QueryRow(r.Context(),
+		`SELECT coalesce(driver_name,'Pierre L.'),coalesce(vehicle_plate,'TOW-77-FR')
+		 FROM mission_driver WHERE mission_id=$1`, mid).Scan(&drvName, &drvPlate) != nil {
+		drvName = "Pierre L."
+		drvPlate = "TOW-77-FR"
+		db.Exec(r.Context(), `INSERT INTO mission_driver(mission_id,driver_name,vehicle_plate) VALUES($1,$2,$3)`, mid, drvName, drvPlate)
+	}
 	db.Exec(r.Context(), `UPDATE cases SET status='dispatched' WHERE id=$1`, in.CaseID)
 	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'dispatch',$2)`, in.CaseID,
 		fmt.Sprintf("dispatched %s ETA %d min", provName, eta))
 	link := statusBase + "/" + fmt.Sprintf("%d", time.Now().UnixNano())
-	smsStatus := sendSMS(r.Context(), in.CaseID, provName, "Pierre L.", "TOW-77-FR", eta, link)
+	smsStatus := sendSMS(r.Context(), in.CaseID, provName, drvName, drvPlate, eta, link)
 	publishEvent(r.Context(), "case.dispatched", map[string]any{"case_id": in.CaseID, "mission_id": mid, "provider": provName, "eta_minutes": eta, "source": src})
 	writeJSON(w, 201, map[string]any{"mission_id": mid, "provider": provName, "provider_source": src,
-		"eta_minutes": eta, "driver": map[string]string{"name": "Pierre L.", "plate": "TOW-77-FR"},
+		"eta_minutes": eta, "driver": map[string]string{"name": drvName, "plate": drvPlate},
 		"status": "en_route", "status_link": link, "sms": smsStatus})
+}
+
+// AGENT: list enabled providers with availability, capabilities, SLA
+func handleAgentProviders(w http.ResponseWriter, r *http.Request) {
+	rows, _ := db.Query(r.Context(), `
+		SELECT p.id, p.display_name, p.priority_rank, p.performance_score,
+		       pc.capabilities::text[], pc.sla_uptime, pc.base_url, pc.status::text,
+		       coalesce(p.categories::text[], '{}'::text[])
+		FROM providers p
+		JOIN provider_connectors pc ON pc.provider_id = p.id
+		WHERE p.status = 'enabled' AND pc.status = 'enabled'
+		ORDER BY p.priority_rank ASC, p.performance_score DESC NULLS LAST
+		LIMIT 20`)
+	defer rows.Close()
+	var out []map[string]any
+	for rows.Next() {
+		var id, name string
+		var rank, score *int
+		var caps []string
+		var sla *float64
+		var url, status *string
+		var cats []string
+		rows.Scan(&id, &name, &rank, &score, &caps, &sla, &url, &status, &cats)
+		p := map[string]any{
+			"id": id, "name": name, "priority_rank": rank,
+			"performance_score": score, "capabilities": caps,
+			"sla_uptime": sla, "categories": cats, "status": status,
+		}
+		// fetch availability windows for this provider
+		arows, _ := db.Query(r.Context(), `SELECT day_of_week,open_time,close_time FROM provider_availability WHERE provider_id=$1 ORDER BY day_of_week`, id)
+		var avail []map[string]any
+		for arows.Next() {
+			var dow int
+			var open, close string
+			arows.Scan(&dow, &open, &close)
+			avail = append(avail, map[string]any{"day": dow, "open": open, "close": close})
+		}
+		arows.Close()
+		p["availability"] = avail
+		out = append(out, p)
+	}
+	writeJSON(w, 200, map[string]any{"providers": out})
+}
+
+// AGENT: queue & SLA statistics (elapsed times, counts)
+func handleAgentStats(w http.ResponseWriter, r *http.Request) {
+	// counts by status
+	var waiting, active, total int
+	db.QueryRow(r.Context(),
+		`SELECT count(1) FROM cases WHERE status IN ('new','triaging')`).Scan(&waiting)
+	db.QueryRow(r.Context(),
+		`SELECT count(1) FROM cases WHERE status IN ('dispatched','en_route','on_site')`).Scan(&active)
+	db.QueryRow(r.Context(),
+		`SELECT count(1) FROM cases WHERE status NOT IN ('closed','resolved','cancelled')`).Scan(&total)
+
+	// longest waiting case (in seconds)
+	var longestSecs *float64
+	db.QueryRow(r.Context(),
+		`SELECT EXTRACT(EPOCH FROM (now()-created_at))::float
+		 FROM cases WHERE status IN ('new','triaging')
+		 ORDER BY created_at ASC LIMIT 1`).Scan(&longestSecs)
+
+	// average time to dispatch (cases dispatched in last 24h, uses interaction_log as fallback)
+	var avgDispatchSecs *float64
+	db.QueryRow(r.Context(), `
+		SELECT coalesce(avg(EXTRACT(EPOCH FROM (coalesce(ca.dispatched_at, il.occurred_at)-ca.created_at))), 0)::float
+		FROM cases ca
+		LEFT JOIN LATERAL (SELECT occurred_at FROM interaction_log WHERE case_id=ca.id AND event_type='dispatch' ORDER BY occurred_at ASC LIMIT 1) il ON true
+		WHERE ca.status='dispatched' AND ca.created_at > now()-interval '24 hours'`).Scan(&avgDispatchSecs)
+
+	// emergency count
+	var emergency int
+	db.QueryRow(r.Context(),
+		`SELECT count(1) FROM cases WHERE priority='emergency' AND status NOT IN ('closed','resolved','cancelled')`).Scan(&emergency)
+
+	// total resolved today
+	var resolvedToday int
+	db.QueryRow(r.Context(),
+		`SELECT count(1) FROM cases WHERE status IN ('resolved','closed') AND resolved_at > current_date`).Scan(&resolvedToday)
+
+	writeJSON(w, 200, map[string]any{
+		"waiting": waiting, "active": active, "total": total,
+		"longest_wait_secs": longestSecs, "avg_dispatch_secs": avgDispatchSecs,
+		"emergency": emergency, "resolved_today": resolvedToday,
+	})
+}
+
+// AGENT: update operator status (on-call, ACW, offline)
+func handleAgentStatus(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Status string } // on_call, acw, offline
+	json.NewDecoder(r.Body).Decode(&in)
+	valid := map[string]bool{"on_call": true, "acw": true, "offline": true}
+	if !valid[in.Status] {
+		writeJSON(w, 400, map[string]string{"error": "invalid status: use on_call, acw, or offline"})
+		return
+	}
+	c, _ := callerFrom(r)
+	if c.ID != "" {
+		db.Exec(r.Context(), `UPDATE staff SET status=$1 WHERE id=$2`, in.Status, c.ID)
+	}
+	writeJSON(w, 200, map[string]any{"status": in.Status, "operator_id": c.ID})
 }
 
 func callProvider(ctx context.Context, caseID, service string) (int, bool) {

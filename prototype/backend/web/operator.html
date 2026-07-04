@@ -84,7 +84,6 @@ html, body {
 .dim { color: var(--muted); }
 .tnum { font-variant-numeric: tabular-nums; }
 
-/* radii: mission control stays functional (<=4px on data chrome) */
 .panel, .tile, .btn, .pill, .prov, .svc, .log-row, .ctl { border-radius: 4px; }
 
 button { font-family: inherit; color: inherit; cursor: pointer; border: none; background: none; }
@@ -148,7 +147,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .status-pill {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 4px 9px; border-radius: 4px;
+  padding: 4px 9px; border-radius: 4px; cursor: pointer;
 }
 .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; }
 .status-pill.avail { color: var(--success); background: color-mix(in oklab, var(--success) 14%, transparent); border: 1px solid color-mix(in oklab, var(--success) 34%, transparent); }
@@ -170,11 +169,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .btn-112:hover { background: color-mix(in oklab, var(--danger) 26%, transparent); }
 .btn-112 .siren { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 10px var(--danger); animation: pulse-glow 1.4s ease-in-out infinite; }
 
-/* view switch */
-.viewswitch { display: flex; background: var(--surface-warm); border: 1px solid var(--border-soft); padding: 3px; flex-shrink: 0; }
-.viewswitch button { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; padding: 6px 12px; border-radius: 3px; color: var(--muted); }
-.viewswitch button.on { background: var(--accent); color: var(--accent-on); }
-
 /* ---------- MAIN GRID ---------- */
 .workspace { flex: 1; display: grid; grid-template-columns: 320px minmax(0,1fr) 360px; gap: var(--space-3); padding: var(--space-3); align-items: start; }
 .col { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
@@ -185,25 +179,18 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
   padding: 10px var(--space-4); border-bottom: 1px solid var(--border-soft);
 }
 .panel-title { font-size: var(--text-sm); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-2); display: flex; align-items: center; gap: 8px; }
-.panel-title svg { color: var(--accent); }
-.panel-body { padding: var(--space-4); }
 
 .tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+.tag.breach { color: var(--danger); }
+.tag.ok { color: var(--success); }
 
 /* ---------- SOFTPHONE ---------- */
-.softphone-head { display: flex; align-items: center; justify-content: space-between; }
 .incoming {
   display: flex; align-items: center; gap: var(--space-3);
   background: color-mix(in oklab, var(--accent) 10%, transparent);
   border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
   padding: var(--space-3); margin-bottom: var(--space-3);
 }
-.incoming .ring { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--accent); animation: ring 1.2s ease-in-out infinite; }
-.incoming .meta { line-height: 1.2; }
-.incoming .meta b { font-size: var(--text-sm); }
-.incoming .meta small { display: block; color: var(--muted); font-size: 11px; }
-.incoming .meta .num { font-family: var(--font-mono); color: var(--fg-2); font-size: 12px; }
-.answer-line { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: auto; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -212,42 +199,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 }
 .btn-primary { background: var(--accent); color: var(--accent-on); box-shadow: var(--elev-ring); }
 .btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-answer { background: var(--success); color: #06120b; }
 .btn-answer:hover { filter: brightness(1.06); }
 .btn-ghost { background: var(--surface-warm); color: var(--fg-2); border: 1px solid var(--border); }
 .btn-ghost:hover { border-color: var(--accent); color: var(--fg); }
 .btn-danger { background: color-mix(in oklab, var(--danger) 16%, transparent); color: var(--danger); border: 1px solid color-mix(in oklab, var(--danger) 40%, transparent); }
 .btn-danger:hover { background: color-mix(in oklab, var(--danger) 26%, transparent); }
-
-.call-live { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); background: var(--surface-warm); border: 1px solid var(--border-soft); margin-bottom: var(--space-3); }
-.call-live .dur { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 700; color: var(--success); }
-.call-live small { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-.eq { display: flex; align-items: flex-end; gap: 2px; height: 22px; }
-.eq span { width: 3px; background: var(--success); border-radius: 1px; animation: eq 0.9s ease-in-out infinite; }
-.eq span:nth-child(2){ animation-delay: .15s } .eq span:nth-child(3){ animation-delay: .3s } .eq span:nth-child(4){ animation-delay: .45s } .eq span:nth-child(5){ animation-delay: .1s }
-
-/* call controls */
-.controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
-.ctl { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; background: var(--surface-warm); border: 1px solid var(--border-soft); color: var(--fg-2); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; transition: all var(--motion-fast); }
-.ctl:hover { border-color: var(--accent); color: var(--fg); }
-.ctl.on { background: color-mix(in oklab, var(--warn) 16%, transparent); border-color: color-mix(in oklab, var(--warn) 40%, transparent); color: var(--warn); }
-.ctl.hang { background: color-mix(in oklab, var(--danger) 16%, transparent); border-color: color-mix(in oklab, var(--danger) 40%, transparent); color: var(--danger); }
-
-/* ---------- SAFETY TRIAGE ---------- */
-.triage { border-color: color-mix(in oklab, var(--warn) 42%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--warn) 22%, transparent), 0 0 26px color-mix(in oklab, var(--warn) 10%, transparent); }
-.triage .panel-head { background: color-mix(in oklab, var(--warn) 12%, transparent); border-bottom-color: color-mix(in oklab, var(--warn) 30%, transparent); }
-.triage .panel-title { color: var(--warn); }
-.triage .panel-title svg { color: var(--warn); }
-.triage-q { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
-.triage-q:last-child { border-bottom: none; }
-.triage-q label { font-size: var(--text-sm); font-weight: 500; }
-.triage-q .hint { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
-.seg { display: flex; gap: 4px; }
-.seg button { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 5px 10px; border: 1px solid var(--border); color: var(--muted); background: var(--surface); text-transform: uppercase; }
-.seg button.yes.on { background: color-mix(in oklab, var(--danger) 18%, transparent); border-color: var(--danger); color: var(--danger); }
-.seg button.no.on { background: color-mix(in oklab, var(--success) 16%, transparent); border-color: var(--success); color: var(--success); }
-.seg button.safe.on { background: color-mix(in oklab, var(--success) 16%, transparent); border-color: var(--success); color: var(--success); }
-.seg button.unsafe.on { background: color-mix(in oklab, var(--danger) 18%, transparent); border-color: var(--danger); color: var(--danger); }
 
 /* ---------- SCREEN POP ---------- */
 .screenpop { display: grid; grid-template-columns: 1fr auto; gap: var(--space-4); }
@@ -272,18 +230,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .priority.normal { border-color: var(--border); }
 .priority.normal .pval { color: var(--accent); }
 
-/* case workspace */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-.subhead { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-2); display: flex; align-items: center; gap: 6px; }
-
-/* mini map */
-.map { position: relative; height: 168px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: #0c1220; }
-.map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.map .coords { position: absolute; bottom: 8px; left: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--accent); background: color-mix(in oklab, var(--bg) 80%, transparent); padding: 3px 7px; border: 1px solid var(--border); border-radius: 3px; }
-.map .maptag { position: absolute; top: 8px; right: 8px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
-.pin { transform-origin: center bottom; animation: drop .5s var(--ease-standard); }
-.ping { transform-box: fill-box; transform-origin: center; animation: ping 2.2s ease-out infinite; }
-
 /* coverage decision */
 .cov-panel { background: color-mix(in oklab, var(--success) 6%, transparent); border: 1px solid color-mix(in oklab, var(--success) 28%, transparent); padding: var(--space-3); border-radius: 4px; }
 .cov-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
@@ -302,10 +248,39 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .svc .txt small { font-size: 10px; color: var(--muted); }
 .svc.on .txt b { color: var(--fg); }
 
+/* ---------- SAFETY TRIAGE ---------- */
+.triage { border-color: color-mix(in oklab, var(--warn) 42%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--warn) 22%, transparent), 0 0 26px color-mix(in oklab, var(--warn) 10%, transparent); }
+.triage .panel-head { background: color-mix(in oklab, var(--warn) 12%, transparent); border-bottom-color: color-mix(in oklab, var(--warn) 30%, transparent); }
+.triage .panel-title { color: var(--warn); }
+.triage-q { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+.triage-q:last-child { border-bottom: none; }
+.triage-q label { font-size: var(--text-sm); font-weight: 500; }
+.triage-q .hint { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
+.seg { display: flex; gap: 4px; }
+.seg button { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 5px 10px; border: 1px solid var(--border); color: var(--muted); background: var(--surface); text-transform: uppercase; }
+.seg button.yes.on { background: color-mix(in oklab, var(--danger) 18%, transparent); border-color: var(--danger); color: var(--danger); }
+.seg button.no.on { background: color-mix(in oklab, var(--success) 16%, transparent); border-color: var(--success); color: var(--success); }
+.seg button.safe.on { background: color-mix(in oklab, var(--success) 16%, transparent); border-color: var(--success); color: var(--success); }
+.seg button.unsafe.on { background: color-mix(in oklab, var(--danger) 18%, transparent); border-color: var(--danger); color: var(--danger); }
+
+/* ---------- CASE DETAILS GRID ---------- */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.subhead { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-2); display: flex; align-items: center; gap: 6px; }
+
+/* mini map */
+.map { position: relative; height: 168px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: #0c1220; }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map .coords { position: absolute; bottom: 8px; left: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--accent); background: color-mix(in oklab, var(--bg) 80%, transparent); padding: 3px 7px; border: 1px solid var(--border); border-radius: 3px; }
+.map .maptag { position: absolute; top: 8px; right: 8px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.pin { transform-origin: center bottom; animation: drop .5s var(--ease-standard); }
+.ping { transform-box: fill-box; transform-origin: center; animation: ping 2.2s ease-out infinite; }
+
 /* ---------- DISPATCH ---------- */
-.prov { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; background: var(--surface-warm); border: 1px solid var(--border-soft); margin-bottom: var(--space-2); transition: all var(--motion-fast); }
+.prov { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; background: var(--surface-warm); border: 1px solid var(--border-soft); margin-bottom: var(--space-2); transition: all var(--motion-fast); cursor: pointer; }
 .prov:hover { border-color: var(--accent); }
 .prov.top { border-color: color-mix(in oklab, var(--accent) 50%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.prov.selected { border-color: var(--success); box-shadow: inset 3px 0 0 var(--success); }
+.prov.fallback { border-color: var(--warn); box-shadow: inset 3px 0 0 var(--warn); }
 .prov .rank { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--accent); width: 18px; }
 .prov .pname { font-size: 12px; font-weight: 600; }
 .prov .pmeta { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 2px; display: flex; gap: 10px; }
@@ -314,6 +289,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .prov .peta .e small { font-size: 9px; color: var(--muted); }
 .prov .avl { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .prov .avl.free { color: var(--success); } .prov .avl.busy { color: var(--warn); }
+.prov .avl.offline { color: var(--muted); }
 .score { display: inline-flex; align-items: center; gap: 4px; }
 .score .star { color: var(--warn); }
 
@@ -344,75 +320,22 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .driver .dinfo b { font-size: 13px; } .driver .dinfo small { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .driver .dinfo .rate { color: var(--warn); font-family: var(--font-mono); font-size: 11px; }
 
-/* ---------- BOTTOM LOG ---------- */
-.bottombar { border-top: 1px solid var(--border); background: var(--surface); }
-.bottom-grid { display: grid; grid-template-columns: 1fr 220px 300px; gap: var(--space-4); padding: var(--space-4) var(--space-5); }
-.log { max-height: 168px; overflow-y: auto; }
-.log-row { display: grid; grid-template-columns: 74px 90px 1fr; gap: 10px; align-items: baseline; padding: 6px 8px; font-size: 12px; border-bottom: 1px solid var(--border-soft); }
-.log-row:hover { background: var(--surface-warm); }
-.log-row .lt { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-.log-row .lc { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; text-align: center; }
-.lc.sys { color: var(--muted); background: var(--surface-warm); }
-.lc.call { color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, transparent); }
-.lc.disp { color: var(--success); background: color-mix(in oklab, var(--success) 12%, transparent); }
-.lc.alert { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
-
+/* ---------- SLA AGE ---------- */
 .sla-age { display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--surface-warm); border: 1px solid var(--border-soft); border-radius: 4px; padding: var(--space-3); }
 .sla-age .big { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; color: var(--warn); }
-.sla-age.breach .big { color: var(--danger); }
+.sla-age.breach .big { color: var(--danger); animation: pulse-glow 2s ease-in-out infinite; }
 .sla-age small { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
 .sla-age .bar { width: 100%; height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .sla-age .bar i { display: block; height: 100%; background: var(--warn); }
 
-.quick { display: flex; flex-direction: column; gap: var(--space-2); }
-.quick .btn { font-size: 12px; padding: 9px 12px; }
+/* auto-refresh indicator */
+.refresh-indicator { font-family: var(--font-mono); font-size: 9px; color: var(--muted); margin-left: 8px; }
+.refresh-indicator.live { color: var(--success); }
+.refresh-indicator.live::after { content: " ● LIVE"; animation: pulse-glow 2s ease-in-out infinite; }
 
-/* ================= CUSTOMER MOBILE ================= */
-#customer.active { align-items: center; justify-content: center; padding: var(--space-6); background:
-  radial-gradient(900px 600px at 50% 0%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 60%), var(--bg); }
-.stage-note { text-align: center; margin-bottom: var(--space-5); }
-.stage-note h2 { font-size: var(--text-lg); font-weight: 700; }
-.stage-note p { color: var(--muted); font-size: var(--text-sm); }
-
-.phone { width: 390px; height: 800px; background: #05070d; border-radius: 44px; padding: 12px; box-shadow: var(--elev-raised), 0 0 0 2px var(--border); position: relative; }
-.phone .island { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 108px; height: 30px; background: #000; border-radius: 20px; z-index: 20; }
-.screen { width: 100%; height: 100%; background: var(--bg); border-radius: 34px; overflow: hidden; position: relative; display: flex; flex-direction: column; }
-.mstatus { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px 4px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
-.mstatus .r { display: flex; gap: 5px; align-items: center; }
-
-.mscroll { flex: 1; overflow-y: auto; padding: var(--space-3) var(--space-4) var(--space-6); }
-.mhead { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0 var(--space-4); }
-.mhead .brand-name { font-size: var(--text-base); }
-.mhelp-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--success); background: color-mix(in oklab, var(--success) 14%, transparent); padding: 4px 9px; border-radius: 4px; border: 1px solid color-mix(in oklab, var(--success) 30%, transparent); }
-
-.emergency-btn { width: 100%; padding: var(--space-5); background: linear-gradient(160deg, var(--danger), #c81e2c); color: #fff; border-radius: var(--radius-md); box-shadow: 0 12px 40px color-mix(in oklab, var(--danger) 40%, transparent); position: relative; overflow: hidden; }
-.emergency-btn::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 0 color-mix(in oklab, var(--danger) 50%, transparent); animation: pulse-ring 2.4s ease-out infinite; }
-.emergency-btn .eb-t { font-size: var(--text-xl); font-weight: 700; }
-.emergency-btn .eb-s { font-size: 12px; opacity: .85; margin-top: 2px; }
-
-.msub { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: var(--space-5) 0 var(--space-3); }
-.incident-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
-.incident-btn { display: flex; flex-direction: column; gap: 8px; padding: var(--space-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: left; transition: all var(--motion-fast); }
-.incident-btn:hover { border-color: var(--accent); }
-.incident-btn.on { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, transparent); }
-.incident-btn .ico { color: var(--accent); }
-.incident-btn b { font-size: 13px; }
-.incident-btn small { font-size: 11px; color: var(--muted); }
-
-/* customer active mission card */
-.mcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-top: var(--space-4); }
-.mmap { height: 190px; position: relative; background: #0c1220; }
-.mmap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.mmap .eta-chip { position: absolute; top: 12px; left: 12px; background: color-mix(in oklab, var(--bg) 82%, transparent); border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); border-radius: var(--radius-pill); padding: 6px 14px; display: flex; align-items: center; gap: 8px; }
-.mmap .eta-chip b { font-family: var(--font-mono); color: var(--accent); font-size: var(--text-base); }
-.mmap .eta-chip small { font-size: 10px; color: var(--fg-2); }
-.mcard-body { padding: var(--space-4); }
-.mdriver { display: flex; align-items: center; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-soft); }
-.mdriver .dphoto { width: 52px; height: 52px; }
-.mdriver b { font-size: var(--text-base); } .mdriver small { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-.mdriver .callbtn { margin-left: auto; width: 42px; height: 42px; border-radius: 50%; background: var(--success); display: grid; place-items: center; color: #06120b; flex-shrink: 0; }
-.mtl { padding-top: var(--space-3); }
-.mtl .tl-node .tl-t { font-size: 13px; }
+/* new-case flash */
+.new-case-flash { animation: flashbg 1.2s var(--ease-standard); }
+.badge-new { display: inline-block; background: var(--accent); color: var(--accent-on); font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -423,7 +346,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 @keyframes pulse-glow { 0%,100% { text-shadow: 0 0 8px currentColor; } 50% { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; } }
 @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 40%, transparent);} 70%,100% { box-shadow: 0 0 0 10px transparent; } }
 @keyframes ring { 0%,100% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(8deg); } }
-@keyframes eq { 0%,100% { height: 5px; } 50% { height: 20px; } }
 @keyframes drop { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
 @keyframes ping { 0% { transform: scale(.4); opacity: .8; } 100% { transform: scale(2.6); opacity: 0; } }
 .flash { animation: flashbg .5s var(--ease-standard); }
@@ -437,7 +359,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 @media (max-width: 1280px) {
   .workspace { grid-template-columns: 300px minmax(0,1fr); }
   .col.right { grid-column: 1 / -1; }
-  .bottom-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; }
@@ -447,7 +368,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 </head>
 <body>
 <div class="app">
-  <!-- LOGIN OVERLAY — matches end-user brand (light, green/navy/amber) -->
+  <!-- LOGIN OVERLAY -->
   <div id="loginOverlay" style="position:fixed;inset:0;z-index:100;display:grid;place-items:center;font-family:Inter,system-ui,Arial,sans-serif;color:#0b1f2a;background:radial-gradient(1100px 560px at 82% -12%,rgba(10,125,90,.12),transparent 60%),#f4f8f6">
     <div style="width:390px;background:#fff;border:1px solid #e3ece8;border-radius:16px;box-shadow:0 22px 64px rgba(11,31,42,.14);overflow:hidden">
       <div style="display:flex;align-items:center;gap:10px;padding:16px 22px;border-bottom:1px solid #eef4f1">
@@ -481,14 +402,15 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
       <div class="sla-strip">
         <div class="sla"><div class="k">Waiting</div><div class="v tnum" id="q-wait">0</div></div>
         <div class="sla crit"><div class="k">Longest wait</div><div class="v tnum" id="q-longest">--:--</div></div>
-        <div class="sla ok"><div class="k">Avg → dispatch</div><div class="v tnum">01:38</div></div>
+        <div class="sla ok"><div class="k">Avg → dispatch</div><div class="v tnum" id="q-avg">--:--</div></div>
         <div class="sla"><div class="k">Active</div><div class="v tnum" id="q-active">0</div></div>
+        <div class="sla"><div class="k">Resolved</div><div class="v tnum" id="q-resolved">0</div></div>
       </div>
       <div class="vr"></div>
       <div class="agent">
         <div class="avatar" id="a_avatar">–</div>
         <div class="who"><b id="a_name">—</b><small id="a_role">not signed in</small></div>
-        <span class="status-pill oncall"><span class="dot"></span>On-call</span>
+        <span class="status-pill oncall" id="statusPill" onclick="toggleStatus()"><span class="dot"></span><span id="statusLabel">On-call</span></span>
       </div>
       <button class="btn-112" onclick="psap()"><span class="siren"></span> 112 · PSAP Transfer</button>
       <button class="ctl" style="width:auto;padding:8px 12px;margin-left:8px" onclick="alogout()">Log out</button>
@@ -506,12 +428,12 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><div class="panel-title">Case queue</div><span class="tag" id="q-count">0</span></div>
+          <div class="panel-head"><div class="panel-title">Case queue</div><div style="display:flex;align-items:center;gap:8px"><span class="tag" id="q-count">0</span><span class="refresh-indicator live" id="refreshDot"></span></div></div>
           <div class="panel-body" style="padding:6px"><div id="queue" class="dim" style="padding:10px">loading…</div></div>
         </div>
       </div>
 
-      <!-- CENTER: screen-pop + case -->
+      <!-- CENTER: screen-pop + case + coverage + triage -->
       <div class="col center">
         <div class="panel">
           <div class="panel-head"><div class="panel-title">Screen Pop — case detail</div><span class="tag" id="c_no">no case selected</span></div>
@@ -529,26 +451,68 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
                   <div class="pop-line">
                     <div class="kv"><span class="k">Vehicle</span><span class="v" id="c_veh">—</span></div>
                     <div class="kv"><span class="k">Incident</span><span class="v" id="c_inc">—</span></div>
+                    <div class="kv"><span class="k">Age</span><span class="v" id="c_age">—</span></div>
                   </div>
                   <div class="pop-line"><div class="kv" style="flex:1"><span class="k">Description</span><span class="v" id="c_desc" style="font-family:var(--font-body)">—</span></div></div>
                 </div>
               </div>
               <div class="priority normal" id="priority"><span class="plab">Priority</span><span class="pval" id="c_prio">—</span><span class="pnote">severity</span></div>
             </div>
+            <!-- SLA age bar -->
+            <div class="sla-age" id="slaAge" style="display:none;margin-top:12px"><small id="slaAgeLabel">Case age</small><div class="big mono" id="slaAgeVal">--</div><div class="bar"><i id="slaAgeBar" style="width:0%"></i></div></div>
+          </div>
+        </div>
+
+        <!-- Coverage Decision -->
+        <div class="panel" id="coveragePanel" style="display:none">
+          <div class="panel-head"><div class="panel-title">Coverage Decision</div><span class="tag" id="covTag">—</span></div>
+          <div class="panel-body">
+            <div class="cov-panel" id="coverageDetails"></div>
+          </div>
+        </div>
+
+        <!-- Safety Triage -->
+        <div class="panel triage" id="triagePanel" style="display:none">
+          <div class="panel-head"><div class="panel-title">⚠ Safety Triage</div><span class="tag" style="color:var(--warn)">critical</span></div>
+          <div class="panel-body" id="triageBody">
+            <div class="triage-q"><label>Everyone safe?</label><div class="seg"><button class="yes on">YES</button><button class="no" onclick="this.parentElement.querySelector('.yes').classList.remove('on');this.classList.add('on');">NO</button></div></div>
+            <div class="triage-q"><label>In live traffic?</label><div class="seg"><button class="unsafe on">YES</button><button class="no" onclick="this.parentElement.querySelector('.unsafe').classList.remove('on');this.classList.add('on');">NO</button></div></div>
+            <div class="triage-q"><label>On hard shoulder?</label><div class="seg"><button class="safe on">YES</button><button class="no" onclick="this.parentElement.querySelector('.safe').classList.remove('on');this.classList.add('on');">NO</button></div></div>
+            <div class="triage-q"><label>Vulnerable occupants?</label><div class="seg"><button class="yes on">YES</button><button class="no" onclick="this.parentElement.querySelector('.yes').classList.remove('on');this.classList.add('on');">NO</button></div></div>
+            <div class="triage-q"><label>Night/darkness?</label><div class="seg"><button class="unsafe on">YES</button><button class="no" onclick="this.parentElement.querySelector('.unsafe').classList.remove('on');this.classList.add('on');">NO</button></div></div>
           </div>
         </div>
       </div>
 
-      <!-- RIGHT: dispatch -->
+      <!-- RIGHT: dispatch + providers + timeline -->
       <div class="col right">
+        <!-- Service selection -->
         <div class="panel">
-          <div class="panel-head"><div class="panel-title">Dispatch — nearest providers</div><span class="tag">geo-ranked</span></div>
-          <div class="panel-body">
-            <div class="prov top"><span class="rank">1</span><div><div class="pname">AXA Roadside FR</div><div class="pmeta"><span>3.2 km</span><span class="score">★4.8</span><span>98% SLA</span></div></div><div class="peta"><div class="e mono" id="p_eta">--<small>min</small></div><div class="avl free">Available</div></div></div>
-            <div class="prov"><span class="rank">2</span><div><div class="pname">Depann'Auto Lyon</div><div class="pmeta"><span>5.1 km</span><span class="score">★4.6</span><span>94% SLA</span></div></div><div class="peta"><div class="e mono">28<small>min</small></div><div class="avl free">Available</div></div></div>
-            <button class="btn btn-primary" id="dispatchBtn" style="margin-top:12px" disabled onclick="dispatch()">🚚 Dispatch nearest</button>
+          <div class="panel-head"><div class="panel-title">Required Service</div><span class="tag" id="svcTag">select</span></div>
+          <div class="panel-body" style="padding:8px">
+            <div class="svc-grid" id="svcGrid">
+              <button class="svc on" data-svc="tow_recovery"><span class="ico">🚚</span><div class="txt"><b>Tow/Recovery</b><small>Vehicle tow</small></div></button>
+              <button class="svc" data-svc="roadside_repair"><span class="ico">🔧</span><div class="txt"><b>Roadside Repair</b><small>On-site fix</small></div></button>
+              <button class="svc" data-svc="jump_start"><span class="ico">🔋</span><div class="txt"><b>Jump Start</b><small>Battery assist</small></div></button>
+              <button class="svc" data-svc="tyre_change"><span class="ico">🛞</span><div class="txt"><b>Tyre Change</b><small>Flat/spare</small></div></button>
+              <button class="svc" data-svc="lockout"><span class="ico">🔑</span><div class="txt"><b>Lockout</b><small>Door unlock</small></div></button>
+              <button class="svc" data-svc="fuel_delivery"><span class="ico">⛽</span><div class="txt"><b>Fuel Delivery</b><small>Out of fuel</small></div></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Providers list -->
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Dispatch — Providers</div><span class="tag" id="provCount">—</span></div>
+          <div class="panel-body" id="providersList" style="padding:8px">
+            <div class="dim" style="padding:10px">loading providers…</div>
+          </div>
+          <div class="panel-body" style="padding:8px;padding-top:0">
+            <button class="btn btn-primary" id="dispatchBtn" disabled onclick="dispatch()">🚚 Dispatch to selected</button>
             <div class="mission-eta" id="missionBox" style="display:none;margin-top:12px"><span class="big mono" id="m_eta">--</span><span class="unit">min ETA</span><div class="lab"><small>Provider</small><b id="m_prov">—</b></div></div>
             <div class="driver" id="driverBox" style="display:none"><div class="dphoto">PL<div class="verified">✓</div></div><div class="dinfo"><b id="m_drv">—</b><small id="m_plate">—</small><span class="rate">SMS <span id="m_sms">—</span></span></div></div>
+            <!-- Mission timeline -->
+            <div class="timeline" id="missionTimeline" style="display:none;margin-top:var(--space-3)"></div>
           </div>
         </div>
       </div>
@@ -558,12 +522,27 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 
 <style>.in{padding:9px;border-radius:4px;border:1px solid var(--border);background:var(--surface-warm);color:var(--fg);font-family:var(--font-mono)}
 #queue table{width:100%;border-collapse:collapse;font-size:12px}#queue td,#queue th{border-bottom:1px solid var(--border-soft);padding:6px;text-align:left}#queue tr{cursor:pointer}#queue tr:hover{background:var(--surface-warm)}
-.qp{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700}.qp.emergency{background:color-mix(in oklab,var(--danger) 20%,transparent);color:var(--danger)}.qp.high{background:color-mix(in oklab,var(--warn) 18%,transparent);color:var(--warn)}.qp.normal{background:color-mix(in oklab,var(--accent) 16%,transparent);color:var(--accent)}</style>
+.qp{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700}.qp.emergency{background:color-mix(in oklab,var(--danger) 20%,transparent);color:var(--danger)}.qp.high{background:color-mix(in oklab,var(--warn) 18%,transparent);color:var(--warn)}.qp.normal{background:color-mix(in oklab,var(--accent) 16%,transparent);color:var(--accent)}
+.hidden{display:none !important}
+</style>
 
 <script>
-// --- Cognito config for operators (populated from backend) ---
+// ===== STATE =====
 const opCognitoCfg = { domain: '', region: 'eu-west-1', clientId: '', redirectUri: location.origin + '/callback' };
-(async () => { try { const r = await fetch('/api/auth/config'); if (r.ok) { const c = await r.json(); if (c.staffDomain) { opCognitoCfg.domain = c.staffDomain; opCognitoCfg.region = c.region; opCognitoCfg.clientId = c.staffClientId; document.getElementById('cognitoLoginOp').classList.remove('hidden'); } } } catch (_) {} })();
+let selCase = null;
+let selProvider = null;
+let selService = 'tow_recovery';
+let operatorStatus = 'on_call';
+let lastCases = {};  // track known case IDs for change detection
+let queueTimer = null;
+let slaTimer = null;
+let providersData = [];
+let statsData = {};
+
+// ===== COGNITO CONFIG =====
+(async () => {
+  try { const r = await fetch('/api/auth/config'); if (r.ok) { const c = await r.json(); if (c.staffDomain) { opCognitoCfg.domain = c.staffDomain; opCognitoCfg.region = c.region; opCognitoCfg.clientId = c.staffClientId; document.getElementById('cognitoLoginOp').classList.remove('hidden'); } } } catch (_) {}
+})();
 
 function opPkceLogin() {
   const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(function(b) { return String.fromCharCode('A'.charCodeAt(0)+b%26); }).join('');
@@ -577,6 +556,7 @@ function opPkceLogin() {
   });
 }
 
+// ===== API HELPERS =====
 function opBearerApi(p, o) {
   o = o || {};
   o.headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
@@ -593,26 +573,355 @@ function opBearerApi(p, o) {
 function api(p,o){return opBearerApi(p,o);}
 function v(id){return document.getElementById(id).value;}
 function el(id){return document.getElementById(id);}
-let selCase=null;
-setInterval(function(){el('clock').textContent=new Date().toLocaleTimeString('en-GB');},1000);
+function fmtSecs(s) {
+  if (!s && s !== 0) return '--:--';
+  var m = Math.floor(s/60), h = Math.floor(m/60);
+  m = m % 60;
+  if (h>0) return h+'h '+m+'m';
+  return m+'m';
+}
+function fmtAge(iso) {
+  if (!iso) return '—';
+  var d = (Date.now() - new Date(iso).getTime()) / 1000;
+  return fmtSecs(d);
+}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ===== AUTH =====
 async function alogin(){const r=await api('/api/agent/login',{method:'POST',body:JSON.stringify({agentID:v('a_id'),password:v('a_pass')})});if(r.ok)enter(r.body);else el('lerr').textContent='⚠ '+(r.body.error||'login failed');}
-async function alogout(){localStorage.removeItem('cognito_tokens');localStorage.removeItem('cognito_pkce');await api('/api/logout',{method:'POST'});location.reload();}
-function enter(me){el('loginOverlay').style.display='none';el('a_name').textContent=me.name;el('a_role').textContent=(me.staff_role||'agent')+' · '+(me.agent_id||'');el('a_avatar').textContent=(me.name||'A').split(' ').map(x=>x[0]).join('').slice(0,2);loadQueue();}
-async function loadQueue(){const r=await api('/api/agent/cases');const c=r.body.cases||[];el('q-count').textContent=c.length;el('q-wait').textContent=c.filter(x=>x.status=='triaging'||x.status=='new').length;el('q-active').textContent=c.filter(x=>x.status=='dispatched'||x.status=='en_route'||x.status=='on_site').length;
- if(!c.length){el('queue').textContent='Queue empty.';return;}
- let h='<table><tr><th>Case</th><th>Customer</th><th>Type</th><th>Prio</th></tr>';c.forEach(x=>h+=`<tr onclick="openCase('${x.id}')"><td class="mono">${x.case_number.replace('CASE-','#')}</td><td>${x.customer}</td><td>${x.incident}</td><td><span class="qp ${x.priority}">${x.priority}</span></td></tr>`);el('queue').innerHTML=h+'</table>';}
-async function openCase(id){selCase=id;const r=await api('/api/agent/case?id='+id);const d=r.body;
- el('c_no').textContent=d.case_number;el('c_cust').textContent=d.customer;el('c_initials').textContent=(d.customer||'?').split(' ').map(x=>x[0]).join('').slice(0,2);
- el('c_pol').textContent=d.policy.number||'—';el('c_cov').textContent=d.policy.coverage||'—';el('c_phone').textContent=d.phone||'—';
- el('c_veh').textContent=((d.vehicle.make||'')+' '+(d.vehicle.model||'')+' '+(d.vehicle.plate||'')).trim()||'—';
- el('c_inc').textContent=d.incident;el('c_desc').textContent=d.description||'—';
- const pr=d.priority||'normal';el('c_prio').textContent=pr.toUpperCase();el('priority').className='priority '+(pr=='emergency'?'emergency':pr=='high'?'high':'normal');
- el('dispatchBtn').disabled=false;
- if(d.mission&&d.mission.provider){showMission(d.mission.provider,d.mission.eta_minutes,'','', '');}}
-async function incoming(){const r=await api('/api/telephony/mock/incoming',{method:'POST',body:JSON.stringify({phone:v('phone')})});const p=r.body;if(!p.matched){el('popline').textContent='Unknown caller — create case manually';return;}const sp=p.screen_pop;el('popline').innerHTML='📞 <b>'+sp.customer.first_name+' '+sp.customer.last_name+'</b> · '+sp.policy.policy_number+' · '+sp.vehicle.make+' '+sp.vehicle.model;loadQueue();}
-async function dispatch(){if(!selCase)return;const r=await api('/api/agent/dispatch',{method:'POST',body:JSON.stringify({caseID:selCase,service:'tow_recovery'})});const d=r.body;el('p_eta').innerHTML=d.eta_minutes+'<small>min</small>';showMission(d.provider,d.eta_minutes,d.driver.name,d.driver.plate,d.sms);loadQueue();}
-function showMission(prov,eta,drv,plate,sms){el('missionBox').style.display='flex';el('m_eta').textContent=eta||'--';el('m_prov').textContent=prov||'—';if(drv){el('driverBox').style.display='flex';el('m_drv').textContent=drv;el('m_plate').textContent=plate;el('m_sms').textContent=sms;}}
-function psap(){alert('Warm-transferring to 112 / PSAP… (Tier-0)');}
-(async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='agent')enter({name:r.body.name,staff_role:'operator',agent_id:''});})();
+async function alogout(){stopTimers();localStorage.removeItem('cognito_tokens');localStorage.removeItem('cognito_pkce');await api('/api/logout',{method:'POST'});location.reload();}
+
+function enter(me){
+  el('loginOverlay').style.display='none';
+  el('a_name').textContent=me.name;
+  el('a_role').textContent=(me.staff_role||'agent')+' · '+(me.agent_id||'');
+  el('a_avatar').textContent=(me.name||'A').split(' ').map(function(x){return x[0]}).join('').slice(0,2);
+  if (me.status) setOperatorStatus(me.status);
+  loadQueue();
+  loadProviders();
+  loadStats();
+  startTimers();
+}
+
+// ===== OPERATOR STATUS =====
+function setOperatorStatus(st) {
+  operatorStatus = st || 'on_call';
+  var pill = el('statusPill');
+  pill.className = 'status-pill ' + (operatorStatus === 'acw' ? 'acw' : operatorStatus === 'offline' ? 'avail' : 'oncall');
+  var labels = { on_call: 'On-call', acw: 'After-call', offline: 'Offline' };
+  el('statusLabel').textContent = labels[operatorStatus] || 'On-call';
+}
+
+async function toggleStatus() {
+  var next = operatorStatus === 'on_call' ? 'acw' : operatorStatus === 'acw' ? 'offline' : 'on_call';
+  var r = await api('/api/agent/status', { method: 'POST', body: JSON.stringify({ status: next }) });
+  if (r.ok) setOperatorStatus(next);
+}
+
+// ===== TIMERS: auto-refresh + SLA =====
+function startTimers() {
+  stopTimers();
+  queueTimer = setInterval(function() { loadQueue(); loadStats(); }, 8000);
+  slaTimer = setInterval(updateSlaTimers, 2000);
+}
+
+function stopTimers() {
+  if (queueTimer) clearInterval(queueTimer);
+  if (slaTimer) clearInterval(slaTimer);
+  queueTimer = null;
+  slaTimer = null;
+}
+
+// ===== QUEUE + STATS =====
+async function loadQueue() {
+  var r = await api('/api/agent/cases');
+  var cases = r.body.cases || [];
+  el('q-count').textContent = cases.length;
+
+  // change detection: flash new cases
+  var curIds = {};
+  var newIds = [];
+  cases.forEach(function(x) { curIds[x.id] = true; if (!lastCases[x.id]) newIds.push(x.id); });
+  lastCases = curIds;
+
+  var w = cases.filter(function(x) { return x.status === 'triaging' || x.status === 'new'; }).length;
+  var a = cases.filter(function(x) { return x.status === 'dispatched' || x.status === 'en_route' || x.status === 'on_site'; }).length;
+  el('q-wait').textContent = w;
+  el('q-active').textContent = a;
+
+  if (!cases.length) { el('queue').textContent = 'Queue empty.'; return; }
+
+  var h = '<table><tr><th>Case</th><th>Customer</th><th>Type</th><th>Age</th><th>Prio</th></tr>';
+  cases.forEach(function(x) {
+    var age = fmtAge(x.created_at);
+    var flash = '';
+    if (newIds.indexOf(x.id) >= 0 && Object.keys(lastCases).length > 5) flash = ' class="new-case-flash"';
+    var cn = (x.case_number || '').replace('CASE-', '#');
+    h += '<tr' + flash + ' onclick="openCase(\'' + x.id + '\')"><td class="mono">' + cn + '</td><td>' + (x.customer || '?') + '</td><td>' + (x.incident || '—') + '</td><td class="mono">' + age + '</td><td><span class="qp ' + (x.priority || 'normal') + '">' + (x.priority || 'normal') + '</span></td></tr>';
+  });
+  el('queue').innerHTML = h + '</table>';
+
+  // re-open current case to refresh its data
+  if (selCase) { var cr = await api('/api/agent/case?id=' + selCase); if (cr.ok) populateCase(cr.body); }
+}
+
+async function loadStats() {
+  var r = await api('/api/agent/stats');
+  if (!r.ok) return;
+  statsData = r.body;
+  el('q-resolved').textContent = statsData.resolved_today || 0;
+  // longest wait
+  var lw = statsData.longest_wait_secs;
+  el('q-longest').textContent = fmtSecs(lw);
+  var slaCrit = el('q-longest').parentElement;
+  if (lw && lw > 300) slaCrit.classList.add('crit');
+  else slaCrit.classList.remove('crit');
+  // avg dispatch
+  var ad = statsData.avg_dispatch_secs;
+  el('q-avg').textContent = fmtSecs(ad);
+}
+
+function updateSlaTimers() {
+  // update all age cells in the queue table
+  if (!selCase) return;
+  var rows = el('queue').querySelectorAll('tr');
+  rows.forEach(function(row) {
+    var cells = row.querySelectorAll('td');
+    if (cells.length >= 5) {
+      // find case ID from onclick attribute
+    }
+  });
+  // update selected case SLA bar
+  updateSlaBar();
+}
+
+function updateSlaBar() {
+  var bar = el('slaAge');
+  if (bar.style.display === 'none') return;
+  var ts = bar.dataset.created;
+  if (!ts) return;
+  var secs = (Date.now() - new Date(ts).getTime()) / 1000;
+  el('slaAgeVal').textContent = fmtSecs(Math.round(secs));
+  // SLA: warn after 15 min, breach after 30 min
+  var pct = clamp(secs / 1800 * 100, 0, 100);
+  el('slaAgeBar').style.width = pct + '%';
+  if (secs > 1800) { bar.classList.add('breach'); el('slaAgeBar').style.background = 'var(--danger)'; }
+  else if (secs > 900) { bar.classList.remove('breach'); el('slaAgeBar').style.background = 'var(--warn)'; }
+  else { bar.classList.remove('breach'); el('slaAgeBar').style.background = 'var(--success)'; }
+}
+
+// ===== PROVIDERS =====
+async function loadProviders() {
+  var r = await api('/api/agent/providers');
+  if (!r.ok || !r.body.providers) return;
+  providersData = r.body.providers;
+  el('provCount').textContent = providersData.length + ' available';
+  renderProviders();
+}
+
+function renderProviders() {
+  var list = el('providersList');
+  if (!providersData.length) { list.innerHTML = '<div class="dim" style="padding:10px">No providers available</div>'; return; }
+  var h = '';
+  providersData.forEach(function(p, i) {
+    var score = p.performance_score ? '★' + (p.performance_score/10).toFixed(1) : '—';
+    var sla = p.sla_uptime ? Math.round(p.sla_uptime) + '% SLA' : '—';
+    var caps = (p.capabilities || []).join(', ');
+    var availCls = 'free';
+    // check if current hour is within availability windows
+    if (p.availability && p.availability.length) {
+      var now = new Date();
+      var dow = now.getDay();
+      var hour = now.getHours() + now.getMinutes()/60;
+      var open = false;
+      p.availability.forEach(function(a) {
+        if (a.day === dow) {
+          var oh = parseInt(a.open) || 0, ch = parseInt(a.close) || 24;
+          if (hour >= oh && hour < ch) open = true;
+        }
+      });
+      availCls = open ? 'free' : 'offline';
+    }
+    var cls = (i === 0 ? 'top' : '');
+    if (selProvider === p.id) cls += ' selected';
+    h += '<div class="prov ' + cls + '" onclick="selectProvider(\'' + p.id + '\')" id="prov-' + p.id + '">';
+    h += '<span class="rank">' + (i+1) + '</span>';
+    h += '<div><div class="pname">' + p.name + '</div><div class="pmeta"><span>' + score + '</span><span>' + sla + '</span><span class="mono">' + caps + '</span></div></div>';
+    h += '<div class="peta"><div class="avl ' + availCls + '">' + (availCls === 'free' ? 'Available' : 'Offline') + '</div></div>';
+    h += '</div>';
+  });
+  list.innerHTML = h;
+}
+
+function selectProvider(pid) {
+  selProvider = pid;
+  el('dispatchBtn').disabled = false;
+  renderProviders();
+  // highlight selected
+  var prev = el('providersList').querySelector('.selected');
+  if (prev) prev.classList.remove('selected');
+  var cur = el('prov-' + pid);
+  if (cur) cur.classList.add('selected');
+}
+
+// service selection
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('#svcGrid .svc').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#svcGrid .svc.on').forEach(function(b) { b.classList.remove('on'); });
+      btn.classList.add('on');
+      selService = btn.dataset.svc;
+      el('svcTag').textContent = selService;
+    });
+  });
+});
+
+// ===== CASE DETAIL =====
+async function openCase(id) {
+  selCase = id;
+  var r = await api('/api/agent/case?id=' + id);
+  if (!r.ok) return;
+  populateCase(r.body);
+}
+
+function populateCase(d) {
+  el('c_no').textContent = d.case_number;
+  el('c_cust').textContent = d.customer;
+  el('c_initials').textContent = (d.customer || '?').split(' ').map(function(x){return x[0]}).join('').slice(0,2);
+  el('c_pol').textContent = (d.policy && d.policy.number) || '—';
+  el('c_cov').textContent = (d.policy && d.policy.coverage) || '—';
+  el('c_phone').textContent = d.phone || '—';
+  el('c_veh').textContent = (((d.vehicle && d.vehicle.make) || '') + ' ' + ((d.vehicle && d.vehicle.model) || '') + ' ' + ((d.vehicle && d.vehicle.plate) || '')).trim() || '—';
+  el('c_inc').textContent = d.incident || '—';
+  el('c_desc').textContent = d.description || '—';
+  el('c_age').textContent = fmtAge(d.created_at);
+  var pr = d.priority || 'normal';
+  el('c_prio').textContent = pr.toUpperCase();
+  el('priority').className = 'priority ' + (pr === 'emergency' ? 'emergency' : pr === 'high' ? 'high' : 'normal');
+
+  // SLA age bar
+  var bar = el('slaAge');
+  bar.style.display = 'flex';
+  bar.dataset.created = d.created_at;
+  el('slaAgeLabel').textContent = 'Case age · ' + pr.toUpperCase();
+  updateSlaBar();
+
+  // Coverage decision
+  if (d.policy) {
+    el('coveragePanel').style.display = 'block';
+    el('covTag').textContent = d.policy.number || '—';
+    var covHtml = '';
+    covHtml += '<div class="cov-row"><span class="lab">Coverage level</span><span class="val">' + (d.policy.coverage || '—') + '</span></div>';
+    covHtml += '<div class="cov-row"><span class="lab">Excess / franchise</span><span class="val mono">' + (d.policy.excess ? '€' + d.policy.excess : '—') + '</span></div>';
+    covHtml += '<div class="cov-row"><span class="lab">Callouts remaining</span><span class="val mono">' + (d.policy.callout_limit != null ? d.policy.callout_limit : '—') + '</span></div>';
+    covHtml += '<div class="cov-row"><span class="lab">Towing</span><span class="val">' + (d.policy.coverage === 'premium' || d.policy.coverage === 'comprehensive' ? '<span class="chk">✓</span> Covered' : '<span class="xno">✗</span>') + '</span></div>';
+    covHtml += '<div class="cov-row"><span class="lab">Roadside repair</span><span class="val">' + (d.policy.coverage === 'premium' || d.policy.coverage === 'comprehensive' ? '<span class="chk">✓</span> Covered' : '<span class="xno">✗</span> Payable') + '</span></div>';
+    el('coverageDetails').innerHTML = covHtml;
+  } else {
+    el('coveragePanel').style.display = 'none';
+  }
+
+  // Safety triage
+  el('triagePanel').style.display = 'block';
+  if (d.safety && d.safety.everyone_safe !== null) {
+    // pre-fill from DB
+    var qs = el('triageBody').querySelectorAll('.triage-q');
+    setSeg(qs[0], d.safety.everyone_safe ? 'yes' : 'no');
+    setSeg(qs[1], d.safety.in_live_traffic ? 'unsafe' : 'no');
+    setSeg(qs[2], d.safety.on_hard_shoulder ? 'safe' : 'no');
+    setSeg(qs[3], d.safety.vulnerable_occupants ? 'yes' : 'no');
+    // qs[4] is dark
+  }
+
+  // Dispatch
+  el('dispatchBtn').disabled = false;
+
+  // Mission data
+  if (d.mission && d.mission.provider) {
+    showMission(d.mission.provider, d.mission.eta_minutes, '', '', '');
+    // timeline
+    if (d.mission.timeline && d.mission.timeline.length) {
+      renderTimeline(d.mission.timeline);
+    }
+  } else {
+    el('missionBox').style.display = 'none';
+    el('driverBox').style.display = 'none';
+    el('missionTimeline').style.display = 'none';
+  }
+}
+
+function setSeg(row, cls) {
+  var btns = row.querySelectorAll('.seg button');
+  btns.forEach(function(b) { b.classList.remove('on'); });
+  var target = row.querySelector('.seg button.' + cls);
+  if (target) target.classList.add('on');
+}
+
+// ===== TIMELINE =====
+function renderTimeline(events) {
+  var tl = el('missionTimeline');
+  tl.style.display = 'block';
+  var h = '';
+  events.forEach(function(ev, i) {
+    var isLast = i === events.length - 1;
+    var cls = isLast ? 'now' : 'done';
+    var label = (ev.label || ev.status || '').replace('_', ' ');
+    var time = ev.occurred_at ? new Date(ev.occurred_at).toLocaleTimeString('en-GB') : '';
+    h += '<div class="tl-node ' + cls + '">';
+    h += '<div class="tl-t">' + label + (ev.eta_minutes ? ' · ' + ev.eta_minutes + ' min ETA' : '') + '</div>';
+    if (time) h += '<div class="tl-time">' + time + '</div>';
+    h += '</div>';
+  });
+  tl.innerHTML = h;
+}
+
+// ===== MOCK TELEPHONY =====
+async function incoming() {
+  var r = await api('/api/telephony/mock/incoming', { method: 'POST', body: JSON.stringify({ phone: v('phone') }) });
+  var p = r.body;
+  if (!p.matched) { el('popline').textContent = 'Unknown caller — create case manually'; return; }
+  var sp = p.screen_pop;
+  el('popline').innerHTML = '📞 <b>' + sp.customer.first_name + ' ' + sp.customer.last_name + '</b> · ' + sp.policy.policy_number + ' · ' + sp.vehicle.make + ' ' + sp.vehicle.model;
+  // auto-screen-pop: find the latest case for this customer
+  loadQueue();
+}
+
+// ===== DISPATCH =====
+async function dispatch() {
+  if (!selCase) return;
+  var body = { caseID: selCase, service: selService };
+  if (selProvider) body.providerID = selProvider;
+  var r = await api('/api/agent/dispatch', { method: 'POST', body: JSON.stringify(body) });
+  if (!r.ok) { alert('Dispatch failed: ' + (r.body.error || 'unknown')); return; }
+  var d = r.body;
+  showMission(d.provider, d.eta_minutes, d.driver ? d.driver.name : '', d.driver ? d.driver.plate : '', d.sms || '');
+  loadQueue();
+  loadProviders();
+}
+
+function showMission(prov, eta, drv, plate, sms) {
+  el('missionBox').style.display = 'flex';
+  el('m_eta').textContent = eta || '--';
+  el('m_prov').textContent = prov || '—';
+  if (drv) {
+    el('driverBox').style.display = 'flex';
+    el('m_drv').textContent = drv;
+    el('m_plate').textContent = plate;
+    el('m_sms').textContent = sms;
+  }
+}
+
+// ===== PSAP =====
+function psap() {
+  if (confirm('WARM-TRANSFER: Are you sure you want to transfer to 112 / PSAP?\n\nThis is a Tier-0 emergency transfer. Case will remain open.')) {
+    el('popline').innerHTML = '<span style="color:var(--danger)">🚨 PSAP transfer initiated. 112 notified. Stay on the line.</span>';
+  }
+}
+
+// ===== INIT =====
+(async function() {
+  var r = await api('/api/me');
+  if (r.body.authenticated && r.body.role === 'agent') enter({ name: r.body.name, staff_role: 'operator', agent_id: '' });
+})();
 </script>
 </body></html>
