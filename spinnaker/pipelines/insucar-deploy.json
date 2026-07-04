@@ -42,6 +42,11 @@
             "labels": {
               "app": "insucar-api"
             },
+            "annotations": {
+              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
+              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
+              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
+            },
             "name": "insucar-api",
             "namespace": "insucar-dev"
           },
@@ -166,6 +171,11 @@
           "metadata": {
             "labels": {
               "app": "insucar-api"
+            },
+            "annotations": {
+              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
+              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
+              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
             },
             "name": "insucar-api",
             "namespace": "insucar-uat"
@@ -293,6 +303,11 @@
           "metadata": {
             "labels": {
               "app": "insucar-api"
+            },
+            "annotations": {
+              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
+              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
+              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
             },
             "name": "insucar-api",
             "namespace": "insucar-prod"

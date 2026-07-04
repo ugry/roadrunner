@@ -32,7 +32,14 @@ spec:
 
   stages {
     stage('Checkout') {
-      steps { checkout scm }
+      steps {
+        checkout scm
+        script {
+          env.GIT_SHA    = sh(script: "git rev-parse --short=12 HEAD", returnStdout: true).trim()
+          env.GIT_AUTHOR = sh(script: "git log -1 --pretty=format:'%an' | tr -d '\"\\\\'", returnStdout: true).trim()
+        }
+        echo "commit=${env.GIT_SHA} author=${env.GIT_AUTHOR}"
+      }
     }
 
     stage('Build & push (Kaniko -> ECR)') {
@@ -53,10 +60,12 @@ spec:
       steps {
         container('tools') {
           sh '''
+            printf '{"parameters":{"imageTag":"%s","gitCommit":"%s","gitAuthor":"%s"}}' \
+              "$TAG" "$GIT_SHA" "$GIT_AUTHOR" > /tmp/payload.json
             wget -q -O- --header="Content-Type: application/json" \
-              --post-data="{\\"parameters\\":{\\"imageTag\\":\\"$TAG\\"}}" \
+              --post-file=/tmp/payload.json \
               "$SPINNAKER_WEBHOOK" || true
-            echo "triggered Spinnaker (imageTag=$TAG)"
+            echo "triggered Spinnaker (imageTag=$TAG commit=$GIT_SHA author=$GIT_AUTHOR)"
           '''
         }
       }
