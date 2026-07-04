@@ -44,3 +44,15 @@ variable "vpc_cidr" {
   type    = string
   default = "10.42.0.0/16"
 }
+
+variable "single_nat_gateway" {
+  description = "Use one shared NAT gateway (cheaper, dev) vs one per AZ (HA, prod). Set false for prod."
+  type        = bool
+  default     = true
+}
+
+variable "admin_cidrs" {
+  description = "CIDRs allowed to reach the Jenkins/Spinnaker LoadBalancers. Lock down before real use (default is intentionally NOT 0.0.0.0/0)."
+  type        = list(string)
+  default     = []
+}

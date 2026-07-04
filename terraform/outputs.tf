@@ -21,3 +21,18 @@ output "ebs_csi_irsa_role_arn" {
 output "cluster_autoscaler_irsa_role_arn" {
   value = module.irsa_cluster_autoscaler.iam_role_arn
 }
+
+output "app_irsa_role_arn" {
+  description = "Annotate ServiceAccount insucar/insucar-api with this ARN (SNS SMS)."
+  value       = module.irsa_app.iam_role_arn
+}
+
+output "spinnaker_irsa_role_arn" {
+  description = "Annotate SAs spinnaker/spin-front50 + spin-clouddriver with this ARN (S3)."
+  value       = module.irsa_spinnaker.iam_role_arn
+}
+
+output "ci_irsa_role_arn" {
+  description = "Annotate ServiceAccount jenkins/jenkins with this ARN (ECR push)."
+  value       = module.irsa_ci.iam_role_arn
+}

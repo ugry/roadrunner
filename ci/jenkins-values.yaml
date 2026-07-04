@@ -5,6 +5,14 @@ controller:
     username: "admin"
     # password provided at install via --set controller.admin.password=... (not committed)
   serviceType: LoadBalancer
+  # Restrict the public LB to admin networks (VPN/office egress IPs).
+  # Prototype left this wide open; DO NOT ship 0.0.0.0/0. Prefer putting
+  # Jenkins behind the ingress + OIDC and setting serviceType: ClusterIP.
+  loadBalancerSourceRanges:
+    - "203.0.113.0/24"   # REPLACE with your admin CIDR(s)
+  # Terminate/redirect to TLS at the LB (NLB+ACM) or, preferably, via ingress.
+  serviceAnnotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
   installLatestPlugins: true
   # NOTE: configuration-as-code, git, workflow-aggregator are already in the chart defaults.
   additionalPlugins:

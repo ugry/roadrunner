@@ -79,8 +79,15 @@ spec:
               dockerRegistries: []
               context: default
               onlySpinnakerManaged: true
-  # Expose Deck (UI) and Gate (API) via LoadBalancer for the prototype
+  # Expose Deck (UI) and Gate (API). Prototype used a plain public LB with
+  # no auth; with OIDC/fiat now enabled above, additionally restrict the LB
+  # to admin networks and use an NLB. Best practice: set type ClusterIP and
+  # front Deck/Gate with the ingress + TLS + OIDC instead of a public LB.
   expose:
     type: service
     service:
       type: LoadBalancer
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+        # Lock the LB to admin CIDRs (kubernetes honors this on AWS):
+        # service.beta.kubernetes.io/load-balancer-source-ranges: "203.0.113.0/24"

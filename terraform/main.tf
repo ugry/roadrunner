@@ -22,7 +22,7 @@ module "vpc" {
   public_subnets  = [for i, az in local.azs : cidrsubnet(var.vpc_cidr, 4, i + 8)]
 
   enable_nat_gateway   = true
-  single_nat_gateway   = true # dev; use one-per-AZ in prod
+  single_nat_gateway   = var.single_nat_gateway # dev=true (shared); prod=false (one per AZ)
   enable_dns_hostnames = true
 
   # Tags required for EKS + Cluster Autoscaler / load balancers
