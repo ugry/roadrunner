@@ -3,7 +3,7 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  # 3 AZs so stateful quorum (2 data + witness) is possible — HA with node autoscaling.
+  # 3 AZs so AWS-managed Multi-AZ data services (RDS/ElastiCache) + node autoscaling give HA.
   azs = slice(data.aws_availability_zones.available.names, 0, 3)
 }
 

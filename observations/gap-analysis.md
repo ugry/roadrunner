@@ -5,7 +5,7 @@ end-user in distress, operator) plus a cross-stakeholder gap register.
 
 ## Headline findings
 1. **Prompt regressed against an explicit instruction.** The user said "do not defer to
-   phase 2, include phase 2 in phase 1," but the prompt de-scoped: multi-cloud warm-standby
+   phase 2, include phase 2 in phase 1," but the prompt de-scoped: multi-region warm-standby
    is only "can be added" (line 44-45), and chaos/DR game-days, 24/7 on-call + incident
    management, third-party pentest, GDPR legal review, load testing, and feature-flag/canary
    delivery all disappeared. These must be restored.
@@ -84,8 +84,8 @@ end-user in distress, operator) plus a cross-stakeholder gap register.
 | 18 | Status-link security (token expiry, PII exposure) | Security/End-user | Medium |
 
 ## Recommended top fixes before build
-- Restore de-scoped phase-2 items (multi-cloud, chaos, on-call, pentest, load, canary).
-- Add telephony DR (multi-region Connect or portable-PBX standby + failover DIDs).
+- Restore de-scoped phase-2 items (multi-region DR, chaos, on-call, pentest, load, canary).
+- Add telephony DR (multi-region Amazon Connect + failover DIDs).
 - Add call-drop recovery + proactive outbound callback + resumable cases.
 - Add emergency-services warm-transfer for Tier-0.
 - Add testing strategy + backup/restore/DR runbook.

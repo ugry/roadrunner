@@ -16,10 +16,10 @@ exist or be provided before the real (no-mock) walking-skeleton can run end-to-e
 - [ ] Migration runner wiring (goose/atlas) around `db/schema.sql` (schema exists; no runner yet).
 - [ ] Dockerfiles (distroless) for every service; image build + cosign signing.
 - [ ] Helm charts / K8s manifests (Deployments, Services, Ingress, NetworkPolicies, PDBs,
-      topologySpread, Patroni/NATS/Redis stateful sets).
-- [ ] Terraform for the dev account + quorum HA cluster (EKS/nodes across >=3 AZs).
-- [ ] Keycloak realm exports: STAFF realm (operator/supervisor/admin/ops/product_owner) + CUSTOMER
-      realm, OIDC clients for console + BFF, seeded demo users.
+      topologySpread; managed data via RDS/ElastiCache/MSK (no self-managed stateful sets).
+- [ ] Terraform for the dev account + EKS (nodes across >=3 AZs) + Multi-AZ managed data (RDS/ElastiCache).
+- [ ] Amazon Cognito setup: STAFF user pool (operator/supervisor/admin/ops/product_owner) + CUSTOMER
+      user pool, OIDC app clients for console + BFF, seeded demo users.
 - [ ] CI pipeline (build/test/scan/SBOM/sign) + Spinnaker pipelines (stood up later, step 10).
 - [ ] `make dev-up` / `make demo-reset` bootstrap + the smoke test + node-kill failover test.
 - [ ] Provider webhook receiver (status/ETA normalizer -> case timeline).
@@ -32,7 +32,7 @@ exist or be provided before the real (no-mock) walking-skeleton can run end-to-e
 - [ ] At least one REAL provider sandbox credential (AXA Roadside Missioning OAuth2, or Towpal API key).
 - [ ] Domain `unysolar.com` DNS access + TLS (ACM wildcard).
 - [ ] Map: OpenStreetMap tiles (free) or a keyed tile/routing provider.
-- [ ] Node quota for a quorum HA cluster (3 members / 2 data + witness) per tier.
+- [ ] Node quota for the EKS cluster (>=2 nodes across >=3 AZs) per tier; data HA via managed services.
 
 ## C. Long-lead / risk items that can block a "live, no-mock" demo
 - SMS sender registration is REGULATED in many countries (10DLC/short-code, sender-ID
@@ -45,8 +45,8 @@ exist or be provided before the real (no-mock) walking-skeleton can run end-to-e
 - Third-party pentest + GDPR/legal sign-off are external and scheduled, not code.
 
 ## D. Design decisions to confirm before build
-- [ ] Quorum HA topology accepted: 3 members OR 2 data + witness across >=3 AZs (fixes the 2-node
-      split-brain trap).
+- [ ] Data HA approach accepted: AWS-managed Multi-AZ services (Amazon RDS/ElastiCache) instead of
+      self-managed quorums (avoids the 2-node split-brain trap).
 - [ ] Blockchain ledger implementation: pragmatic default is the SHA-256 hash-chained,
       append-only `audit_ledger` table in `db/schema.sql`; upgrade to Hyperledger Fabric only if
       an independent permissioned chain is required. Confirm which.
@@ -57,8 +57,8 @@ exist or be provided before the real (no-mock) walking-skeleton can run end-to-e
 
 ## E. Minimal path to a running first prototype (once B is provided)
 1. Terraform dev account + HA cluster (or local k3d 3-node) up.
-2. Apply `db/schema.sql` then `db/seed.sql` (Patroni Postgres).
-3. Deploy Keycloak + import realms + seed users.
+2. Apply `db/schema.sql` then `db/seed.sql` (Amazon RDS PostgreSQL, Multi-AZ).
+3. Provision Amazon Cognito user pools + seed users.
 4. Deploy Go services + BFF + Rust vault + React console.
 5. Wire Connect Streams -> BFF WebSocket -> console screen-pop.
 6. Configure one real provider connector (sandbox) + webhook receiver.

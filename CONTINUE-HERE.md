@@ -71,14 +71,14 @@ export PATH="$HOME/.local/bin:$PATH"
    Pipeline def committed at spinnaker/pipelines/insucar-deploy.json. Manifests in k8s/.
 
 ## NEXT STEPS (priority order) — updated 2026-07-03 evening
-1. Replace demo auth with Keycloak (customer/staff/partner realms, MFA); wire the 3 apps to OIDC.
+1. Replace demo auth with Amazon Cognito (customer/staff/partner user pools, MFA); wire the 3 apps to OIDC.
 2. Make operator console fully live/rich: auto-refresh queue, real screen-pop auto-open on incoming,
    coverage-decision action, provider choice + fallback UI, SLA/aging timers, notes/timeline UI.
    (Consider carrying the light brand into the console body, or keep dark — ask user.)
 3. Multi-tenant in code: resolve tenant by host/JWT and SET app.current_tenant so RLS engages.
 4. Real telephony: swap mock Connect for live Amazon Connect + Lex; Pinpoint SMS out of sandbox.
 5. Real provider connectors (AXA Roadside Missioning / Towpal) via the connector registry + webhooks.
-6. HA data: Patroni Postgres (quorum, 2+witness); move to separate AWS accounts per tier.
+6. HA data: Amazon RDS Multi-AZ (managed failover); move to separate AWS accounts per tier.
 7. Expand Spinnaker pipeline stages (bake->canary/Kayenta->prod); run git-push->deploy end-to-end.
 8. Harden: rotate the ROOT AWS keys + GitHub PAT; SSO+TLS in front of Jenkins/Spinnaker; restrict LBs.
 9. Optional: one consistent brand mark across all surfaces (swap OD landing logo for design/insucar-logo.svg).

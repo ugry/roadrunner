@@ -10,8 +10,8 @@ Decisions taken by the product owner for this build phase:
 - #13 (immutable prod-access blockchain ledger + JIT IAM approval): **IGNORED for now.**
 - KUBERNETES: **2 worker nodes in HA** + **autoscaling** (cluster autoscaler for nodes, HPA for
   pods) to absorb demand/traffic spikes.
-  NOTE (quorum caveat, documented): true stateful auto-failover needs an ODD quorum (3, or 2+witness).
-  Compute HA at 2 nodes + autoscaling is fine; for HA Postgres add a witness later (Patroni/etcd).
+  NOTE (data HA): stateful auto-failover is delegated to AWS-managed Multi-AZ services rather than
+  self-managed quorums. Compute HA at 2 nodes + autoscaling is fine; for HA Postgres use Amazon RDS Multi-AZ.
 - CI/CD: **Jenkins + Spinnaker must be functional** -> full Spinnaker pipeline
   (bake -> dev -> manual judgment -> UAT -> prod) is a MUST (#14).
 - TESTING (#15): unit/integration + smoke tests wired into CI — important, include now.
@@ -48,7 +48,7 @@ Trigger URL: http://<gate-lb>/webhooks/webhook/insucar-ci
   If port 80 must be fully closed later -> switch to DNS-01 (Route53) and drop the :80 listener.
 - Brand tokens (light): green #0a7d5a, green-dark #086a4d, navy #0b1f2a, amber #f5a623, bg #f4f8f6,
   line #e3ece8, font Inter. Operator console body stays dark (ops density); its LOGIN is light-branded.
-- Auth remains demo-grade (SHA-256 + shared SESSION_SECRET env). Keycloak/MFA still the planned upgrade.
+- Auth remains demo-grade (SHA-256 + shared SESSION_SECRET env). Amazon Cognito/MFA still the planned upgrade.
 - Image build: golang:1.24-alpine (aws-sdk-go-v2 needs >=1.24); tests run in build (go vet + go test).
 - Deploy method this session: kubectl set image (fast). Spinnaker gated pipeline still available for
   formal promotion (spinnaker/pipelines/insucar-deploy.json). Image tags used: auth, domains, landing,

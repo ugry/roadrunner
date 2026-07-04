@@ -58,9 +58,9 @@ Where Insucar already aligns / can win:
 - Incident-type intake, geolocation, live tow tracking (ETA) — already in our design/prototype. Match.
 - Multilingual, per-country — in our design (11 langs) . Match.
 - Differentiators to press:
-  * **Modern, portable, event-driven stack** (Go/Rust, EKS, IaC, Spinnaker) vs a CMS-on-Azure
+  * **Modern, fully AWS-managed, event-driven stack** (Go/Rust, EKS, IaC, Spinnaker) vs a CMS-on-Azure
     marketing surface — faster iteration, no legacy anchor.
-  * **Security posture**: hidden operator surface, hash-chained audit ledger, quorum HA, strict
+  * **Security posture**: hidden operator surface, hash-chained audit ledger, Multi-AZ managed HA, strict
     3-tier IAM + product-owner-gated prod access.
   * **Transparency to the stranded customer**: tokenized status link + driver identity/plate/photo.
   * **Emergency-first UX**: call-drop recovery/outbound callback, PSAP warm-transfer, accessibility

@@ -27,9 +27,9 @@
   case, dispatch) on real PostgreSQL/PostGIS, reachable on the real domain.
 - IS NOT (yet): the full production design. Still to do for production parity —
   * Telephony: live Amazon Connect number + Lex + CCP softphone (needs a claimed number).
-  * HA: quorum cluster (EKS, 3 AZs, Patroni Postgres) — this demo is a SINGLE instance (no failover).
+  * HA: managed Multi-AZ data (EKS across 3 AZs + Amazon RDS Multi-AZ) — this demo is a SINGLE instance (no failover).
   * TLS: HTTPS via ACM + ALB/CloudFront (currently plain HTTP on :8080).
-  * Rust inner-core vault, Keycloak SSO, Spinnaker CD, Pinpoint SMS, real provider sandbox.
+  * Rust inner-core vault, Amazon Cognito SSO, Spinnaker CD, Pinpoint SMS, real provider sandbox.
 
 ## Security follow-ups (do these)
 - ROTATE the AWS credentials used: they are ROOT access keys (arn:...:root). Delete them and use a

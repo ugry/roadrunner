@@ -12,7 +12,7 @@ Last updated: 2026-07-03
    - Competitor/provider API research via exa.ai (AXA Roadside Missioning, Towpal, Agero/Swoop, HONK,
      Booking.com, CrashBay, ARC Europe, Europ Assistance) + IVR/Amazon Connect + CTI screen-pop.
    - Authored agentic build prompt and iterated: v1 -> v2 gap-hardened -> Spinnaker mandated ->
-     no-mocks + quorum HA -> end-user registration + separate hidden operator app.
+     no-mocks + managed Multi-AZ HA -> end-user registration + separate hidden operator app.
    - Multi-stakeholder gap analysis + prototype-readiness checklist (observations/).
 3. Data layer
    - db/schema.sql (registration, identity, policies, vehicles, cases, PostGIS location, providers/
@@ -59,8 +59,8 @@ Last updated: 2026-07-03
 - No full end-to-end pipeline RUN yet: git push -> Jenkins insucar-ci -> build/push image to ECR ->
   webhook -> Spinnaker deploy. ECR repo not yet created; Spinnaker webhook/pipeline JSON not yet applied.
 - Prototype runs on a standalone EC2, NOT yet deployed onto EKS via Spinnaker.
-- Not yet built/deployed (per full design): Amazon Connect telephony + Lex, Keycloak SSO, Rust
-  inner-core vault, Pinpoint SMS, TLS/HTTPS (ACM+ALB), quorum HA Postgres (Patroni), multi-cloud.
+- Not yet built/deployed (per full design): Amazon Connect telephony + Lex, Amazon Cognito SSO, Rust
+  inner-core vault, Pinpoint SMS, TLS/HTTPS (ACM+ALB), Amazon RDS Multi-AZ PostgreSQL.
 - Auth/TLS not configured on Jenkins/Spinnaker (open via LB) — fine for demo, harden before real use.
 
 ## CI/CD end-to-end proven (2026-07-03)

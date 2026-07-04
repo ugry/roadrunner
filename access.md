@@ -33,7 +33,7 @@ Last updated: 2026-07-03
 - API health:        http://api.unysolar.com:8080/healthz
 - Operator console:  http://app.unysolar.com:8080/ops-console-7f3a9c   (HIDDEN path — keep secret)
 - App DB (inside container, not public): PostgreSQL  user `postgres` / pass `test` / db `insucar`
-- Note: prototype apps have NO login yet (Keycloak not deployed here); operator surface is
+- Note: prototype apps have NO login yet (Amazon Cognito not deployed here); operator surface is
   protected only by the obscure path + 404-on-miss.
 
 ## Deploy artifact bucket
@@ -71,7 +71,7 @@ Last updated: 2026-07-03
 ## Demo data (DB rows in the prototype — not login credentials)
 - Customers (phone = ANI lookup key): Claire Martin +33600000001 / John Smith +447700900002 /
   Lukas Mueller +491600000003
-- Staff rows: operator@insucar.demo / supervisor@insucar.demo / po@insucar.demo (Keycloak not wired
+- Staff rows: operator@insucar.demo / supervisor@insucar.demo / po@insucar.demo (Amazon Cognito not wired
   in the prototype, so these are data only — no passwords yet).
 
 ---

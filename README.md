@@ -2,7 +2,7 @@
 
 > A global, multi-line **assistance company** platform competing head-to-head with **Redion**
 > (formerly Europ Assistance, Generali group). Human-coordinator-first ("phone fix first"),
-> emergency-first, multi-tenant B2B white-label, built on a modern, portable, secure stack.
+> emergency-first, multi-tenant B2B white-label, built on a modern, fully AWS-managed, secure stack.
 >
 > This README is the entry point. For deeper context read, in order:
 > `CONTINUE-HERE.md` (handoff), `build-notes.md` (decisions), `milestone.md` (history),
@@ -32,7 +32,7 @@ Core principles:
   augment humans, we do not replace them.
 - **Functional over flashy** — every demo step works end to end (no mocks in the delivered path,
   except telephony which is explicitly mocked for this phase — see Decisions).
-- **Security, reliability, portability** by design.
+- **Security, reliability, operational simplicity** by design — AWS-managed services first.
 
 Flagship (Mobility) hero flow:
 `call → multilingual IVR + spoken intake → safety triage → coordinator "phone fix" → if unresolved,
@@ -72,23 +72,28 @@ README.md        This file
    Go core services:  case/incident · dispatch/matching(PostGIS) · coverage/policy ·
                       provider-integration · notification · tenant/partner · catalog
                                    │                    │                 │
-                     Rust inner-core vault        NATS/Redis         Real provider connectors
-                     (PII tokenization +          (events/cache)     (HTTP; AXA/Towpal-style)
+                     Rust inner-core vault    EventBridge/SNS/SQS      Real provider connectors
+                     (PII tokenization +       + ElastiCache (cache)    (HTTP; AXA/Towpal-style)
                       SHA-256 hash-chained ledger)     │                 │
-                                   └──────── PostgreSQL + PostGIS ───────┘        Real SMS (AWS SNS)
+                                   └──── Amazon RDS (PostgreSQL + PostGIS, Multi-AZ) ────┘   Real SMS (AWS SNS)
 ```
 
-Stack (locked):
+Stack (locked — AWS-managed first):
 - **Backend core: Go** (memory-safe, high concurrency, small containers).
 - **BFF: Go** (one API tailored to the frontends; generates TS types).
 - **Inner-core vault: Rust** — the "crown jewels" zone: PII tokenization + KMS envelope encryption +
   append-only SHA-256 hash-chained audit ledger; network-isolated, mTLS-only, no public route.
 - **Frontend: React** — consumer app, operator console, partner portal (i18n EN+FR first).
-- **Data: PostgreSQL + PostGIS**, Redis, NATS JetStream.
+- **Data: Amazon RDS for PostgreSQL + PostGIS (Multi-AZ)** (Aurora option), **Amazon ElastiCache
+  for Redis (Multi-AZ)**, **Amazon EventBridge + SNS/SQS** for async/events (Amazon MSK only if
+  Kafka semantics are required).
 - **Telephony: Amazon Connect** (MOCKED this phase via an adapter) + Lex; screen-pop via Streams.
-- **Auth: Keycloak** — customer / staff / partner realms; OIDC/OAuth2/SAML/Kerberos/AD (planned).
-- **Platform: Kubernetes (EKS)**; **Terraform** IaC; **Jenkins** (CI) + **Spinnaker** (CD).
-- **Observability: Prometheus + Loki + Grafana + Alertmanager + OpenTelemetry** (planned wiring).
+- **Auth: Amazon Cognito** — customer / staff / partner user pools; OIDC/OAuth2/SAML federation
+  (AD/LDAP via SAML IdP) (planned).
+- **Platform: Kubernetes (EKS, AWS-managed control plane)**; **Terraform** IaC; **Jenkins** (CI) +
+  **Spinnaker** (CD).
+- **Observability: Amazon Managed Service for Prometheus + Amazon Managed Grafana + CloudWatch Logs
+  + AWS X-Ray (OpenTelemetry)** (planned wiring).
 
 ---
 
@@ -134,8 +139,8 @@ Data model (see `db/schema.sql` + `db/schema-v3-additions.sql`):
   developers dev-only, UAT read-biased pre-prod, prod read-only with JIT product-owner-approved
   access. (Prototype currently uses one account + namespaces; #13 immutable prod-access ledger is
   deferred.)
-- **Surface isolation.** Consumer / operator / partner are separate apps, hosts, and Keycloak
-  realms. **Operator console is non-discoverable** (obscure path, 404 to strangers), MFA + zero
+- **Surface isolation.** Consumer / operator / partner are separate apps, hosts, and Amazon Cognito
+  user pools. **Operator console is non-discoverable** (obscure path, 404 to strangers), MFA + zero
   trust intended.
 - **Multi-tenant isolation.** Row-Level Security by `tenant_id` (validated); RLS enforced for
   non-superuser app roles.
@@ -164,11 +169,11 @@ Working now (prototype):
 
 Planned (see `prompt/agenticpromptinsucar.md` + `CONTINUE-HERE.md`):
 - Split backend into the full Go service set + Rust vault service; OpenAPI/gRPC contracts.
-- Keycloak (3 realms) + real auth on all surfaces; partner portal; consumer Digital-RSA app with
+- Amazon Cognito (3 user pools) + real auth on all surfaces; partner portal; consumer Digital-RSA app with
   live geo-tracking.
 - Real Amazon Connect + Lex; PSAP warm-transfer; call-drop callback; accessibility/interpreter.
 - Full service catalog (repatriation, tyre, EV swap, micromobility, travel/home/health/senior/concierge).
-- Quorum-HA Postgres (Patroni), multi-region telephony DR, cross-cloud warm-standby.
+- Amazon RDS for PostgreSQL Multi-AZ (Aurora option; cross-region read replica for DR), multi-region telephony DR.
 - Observability wiring (Prometheus/Loki/Grafana), tests (integration/e2e/load/chaos), TLS.
 
 ---
@@ -218,9 +223,9 @@ psql ... -f db/schema.sql -f db/seed.sql -f db/schema-v3-additions.sql
 
 1. Read `CONTINUE-HERE.md` (tooling in `~/.local/bin`, gotchas & fixes, exa.ai key, live URLs).
 2. Check state: `kubectl get nodes,pods -A`; Jenkins/Spinnaker GUIs from `access.md`.
-3. Highest-value next steps (from gap analysis): Keycloak + 3 realms & real auth; split backend
+3. Highest-value next steps (from gap analysis): Amazon Cognito + 3 user pools & real auth; split backend
    into tenant-aware Go services with OpenAPI; consumer Digital-RSA UI + partner portal;
-   quorum-HA Postgres; observability wiring; tests.
+   Amazon RDS Multi-AZ PostgreSQL; observability wiring; tests.
 4. Deploy changes the proven way: push image to ECR → run/trigger the Spinnaker pipeline
    (`spinnaker/pipelines/insucar-deploy.json`), or `git push` to let Jenkins do it.
 5. Keep decisions in `build-notes.md`, history in `milestone.md`, credentials/URLs in `access.md`.

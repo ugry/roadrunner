@@ -5,9 +5,9 @@
 # AZ-pinned EBS). RDS Multi-AZ gives an automatic synchronous standby in a
 # second AZ with RPO≈0 and managed failover, backups, and PITR.
 #
-# Trade-off (documented in the design): RDS is AWS-proprietary and conflicts
-# with the repo's "portable / cross-cloud" goal. Use this when AWS is the
-# committed home; keep the Patroni path if multi-cloud portability wins.
+# The platform is fully AWS-managed (no multi-cloud goal), so RDS Multi-AZ is
+# the default for data HA — it removes the single-pod SPOF with minimal ops
+# (Aurora PostgreSQL is the drop-in upgrade for higher scale/faster failover).
 #
 # PostGIS: supported on RDS Postgres. After creation, connect and run:
 #     CREATE EXTENSION IF NOT EXISTS postgis;

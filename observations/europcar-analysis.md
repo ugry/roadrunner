@@ -67,5 +67,5 @@ phone / PDF / agent-driven process, not a self-service digital product.
 - Customer request app (breakdown request + GPS location).
 - Geo-dispatch / matching backend (nearest available provider).
 - Live ETA tracking (real-time map).
-- Recommended stack: event-driven backend (Node/TS or Go + WebSockets/Kafka),
-  Postgres + PostGIS for geo, React / React Native clients.
+- Recommended stack: event-driven backend (Go + WebSockets; Amazon EventBridge/SNS/SQS),
+  Amazon RDS for PostgreSQL + PostGIS (Multi-AZ) for geo, React / React Native clients.
