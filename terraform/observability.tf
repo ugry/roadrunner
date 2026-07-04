@@ -72,3 +72,36 @@ output "amp_remote_write_url" {
   value       = "${aws_prometheus_workspace.this.prometheus_endpoint}api/v1/remote_write"
 }
 output "grafana_workspace_endpoint" { value = aws_grafana_workspace.this.endpoint }
+
+# IRSA for the in-cluster Prometheus agent to remote_write metrics into AMP.
+resource "aws_iam_policy" "amp_remote_write" {
+  name = "${var.cluster_name}-${var.environment}-amp-remote-write"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect   = "Allow",
+      Action   = ["aps:RemoteWrite", "aps:GetSeries", "aps:GetLabels", "aps:GetMetricMetadata"],
+      Resource = aws_prometheus_workspace.this.arn
+    }]
+  })
+}
+
+module "irsa_prometheus" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.44"
+
+  role_name        = "${var.cluster_name}-${var.environment}-prometheus"
+  role_policy_arns = { amp = aws_iam_policy.amp_remote_write.arn }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["monitoring:prometheus-server"]
+    }
+  }
+}
+
+output "prometheus_irsa_role_arn" {
+  description = "Annotate SA monitoring/prometheus-server with this ARN (AMP remote_write)."
+  value       = module.irsa_prometheus.iam_role_arn
+}
