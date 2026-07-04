@@ -115,7 +115,7 @@ spec:
               --context="$(pwd)/prototype/worker" \
               --dockerfile="$(pwd)/prototype/worker/Dockerfile" \
               --destination="$ECR_WORKER:$TAG" \
-              --destination="$ECR_WORKER:latest"
+              --destination="$ECR_WORKER:latest" && true
           '''
         }
       }
