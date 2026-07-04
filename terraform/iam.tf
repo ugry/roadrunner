@@ -118,7 +118,7 @@ data "aws_iam_policy_document" "ci_ecr" {
       "ecr:BatchGetImage",
       "ecr:GetDownloadUrlForLayer",
     ]
-    resources = [aws_ecr_repository.insucar_api.arn]
+    resources = [aws_ecr_repository.insucar_api.arn, aws_ecr_repository.insucar_worker.arn]
   }
 }
 

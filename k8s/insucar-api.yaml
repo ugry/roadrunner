@@ -19,6 +19,9 @@ data:
   AWS_REGION: "eu-west-1"
   # `terraform output event_bus_name`
   EVENT_BUS_NAME: "insucar-prod"
+  # `terraform output sqs_queue_urls` (consumed by insucar-worker)
+  DISPATCH_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/326804802908/insucar-prod-dispatch"
+  NOTIFICATION_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/326804802908/insucar-prod-notification"
   # `terraform output cognito_staff_issuer`
   COGNITO_ISSUER: "https://cognito-idp.eu-west-1.amazonaws.com/REPLACE_staff_pool_id"
   # comma-separated app client ids allowed to call the API

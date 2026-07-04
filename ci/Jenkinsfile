@@ -58,6 +58,7 @@ spec:
 
   environment {
     ECR   = "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api"
+    ECR_WORKER = "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker"
     TAG   = "${env.BUILD_NUMBER}"
     SPINNAKER_WEBHOOK = "http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com/webhooks/webhook/insucar-ci"
   }
@@ -121,6 +122,20 @@ spec:
         }
         script {
           env.IMAGE_DIGEST = sh(script: "cat /workspace/digest 2>/dev/null || true", returnStdout: true).trim()
+        }
+      }
+    }
+
+    stage('Build & push worker (Kaniko -> ECR)') {
+      steps {
+        container('kaniko') {
+          sh '''
+            /kaniko/executor \
+              --context="$(pwd)/prototype/worker" \
+              --dockerfile="$(pwd)/prototype/worker/Dockerfile" \
+              --destination="$ECR_WORKER:$TAG" \
+              --destination="$ECR_WORKER:latest"
+          '''
         }
       }
     }
