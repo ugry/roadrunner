@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "prompt": "{file:./.opencode/agents/insucar.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "task": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "todowrite": "allow",
+        "question": "allow"
+      },
+      "steps": 100
+    }
+  }
+}
