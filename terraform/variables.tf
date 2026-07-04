@@ -56,3 +56,15 @@ variable "admin_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "db_instance_class" {
+  description = "RDS instance class for the managed PostgreSQL."
+  type        = string
+  default     = "db.t3.medium"
+}
+
+variable "db_multi_az" {
+  description = "Run RDS with a synchronous standby in a second AZ (HA). Set false only for throwaway dev."
+  type        = bool
+  default     = true
+}
