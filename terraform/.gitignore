@@ -7,3 +7,6 @@ crash.log
 override.tf
 override.tf.json
 # Keep .terraform.lock.hcl committed (pins provider versions).
+*.tfplan
+apply*.log
+destroy*.log

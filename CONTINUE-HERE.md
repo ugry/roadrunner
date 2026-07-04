@@ -5,21 +5,24 @@ Repo: https://github.com/ugry/insucar (private) · cloned locally at /tmp/insuca
 AWS: account 326804802908, region eu-west-1 · Domain: unysolar.com (Route53 zone Z06143773JJ0DPRILPDA0)
 Last updated: 2026-07-03 (evening)
 
-## Rollout attempt (dev) — BLOCKED on vCPU quota (2026-07-04)
-- Bootstrapped TF remote state: S3 `insucar-tfstate-326804802908` (versioned, AES256,
-  public-access-blocked) + DynamoDB `insucar-tf-lock`. These REMAIN (cheap, reusable).
-- `terraform apply` (workspace `dev`, `-var cluster_name=insucar-dev -var db_multi_az=false`)
-  built 124/143 resources cleanly (VPC, EKS control plane, RDS, ElastiCache, Cognito, IAM,
-  messaging, AMP). Plan gate was verified 0-to-destroy first (live cluster safe).
-- BLOCKER: EKS node group failed `VcpuLimitExceeded` — account On-Demand Standard vCPU quota
-  is **8**, fully consumed by the LIVE `insucar` cluster (2× t3.xlarge). No headroom for dev nodes.
-- Actions taken: requested Service Quota increase L-1216C47A 8 -> 32 (region eu-west-1, PENDING);
-  deleted the orphan node group; `terraform destroy` rolled back all 122 dev resources (cost stopped).
-  Live `insucar` + unysolar.com verified untouched (HTTP 200).
-- NEXT: once the quota is approved, re-run `terraform apply -var cluster_name=insucar-dev
-  -var db_multi_az=false` (dev workspace) and continue `ROLLOUT.md` §3+. Alternatively decommission
-  the old eksctl `insucar` cluster to free vCPUs, OR apply in a separate AWS account (the intended
-  3-tier design). Grafana is gated off (`enable_grafana=false`) until IAM Identity Center/SAML exists.
+## Dev rollout VALIDATED end-to-end, then torn down for cost (2026-07-04)
+- vCPU quota raised 8 -> 32 (approved). Applied the FULL managed stack to a `dev` workspace
+  (`cluster_name=insucar-dev`, separate from live `insucar`). PROVEN RUNNING on real AWS (~139 res):
+  EKS insucar-dev ACTIVE (v1.30, 2× t3.xlarge), RDS PostgreSQL 16.9 available, ElastiCache Redis
+  Multi-AZ available, 3 Cognito pools, SQS dispatch/notification + DLQs + EventBridge bus, AMP ACTIVE,
+  ECR insucar-dev-api/worker.
+- Fixed 5 real IaC bugs found during apply (committed b3b8621): RDS 15.7->16.9 (+pg16 param group);
+  EBS CSI addon -> standalone aws_eks_addon wired to its IRSA role; ECR repos + S3 buckets
+  environment-scoped (avoid colliding with live insucar-api/insucar-spinnaker/insucar-deploy);
+  redis-auth secret recovery_window=0; Cognito partner client callback/logout URLs.
+- KNOWN FLAKE: aws-ebs-csi-driver addon was slow to reach ACTIVE in this account (non-blocking — the
+  stack uses managed RDS/ElastiCache, not in-cluster EBS). Revisit on the real deploy.
+- Decision (architect): objective proven; torn down (`terraform destroy`, 139 removed) to stop
+  ~$0.60/hr since it was a validation stack parallel to the live site. Live `insucar` + unysolar.com
+  untouched (HTTP 200). TF remote state (S3 + DynamoDB lock) REMAINS.
+- TO DEPLOY FOR REAL: use a DEDICATED AWS account (3-tier design), `terraform apply
+  -var environment=<env> -var cluster_name=insucar-<env>`, then `ROLLOUT.md` §3+. Grafana stays
+  gated off (`enable_grafana=false`) until IAM Identity Center/SAML is configured.
 
 
 ## TL;DR current state (LIVE)
