@@ -1,5 +1,5 @@
-// Insucar CI: build+push the API image with Kaniko (in-cluster, no Docker daemon),
-// then trigger the Spinnaker gated deploy pipeline via its webhook.
+// Insucar CI: quality + security gates, then build/push (Kaniko), SBOM+sign, scan,
+// and finally trigger the Spinnaker gated deploy pipeline via its webhook.
 pipeline {
   agent {
     kubernetes {
@@ -8,16 +8,50 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
+    - name: go
+      image: golang:1.24-alpine
+      command: ["sleep"]
+      args: ["9999999"]
+      resources:
+        requests: { cpu: "250m", memory: "512Mi" }
     - name: kaniko
       image: gcr.io/kaniko-project/executor:v1.23.2-debug
       command: ["sleep"]
       args: ["9999999"]
       resources:
         requests: { cpu: "250m", memory: "512Mi" }
+    - name: syft
+      image: anchore/syft:v1.14.1
+      command: ["sleep"]
+      args: ["9999999"]
+    - name: cosign
+      image: gcr.io/projectsigstore/cosign:v2.4.1
+      command: ["sleep"]
+      args: ["9999999"]
+      env:
+        # cosign signing key material, provided out-of-band as a k8s secret:
+        #   kubectl -n jenkins create secret generic cosign-key \\
+        #     --from-file=cosign.key=cosign.key --from-literal=password=<PW>
+        - name: COSIGN_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: cosign-key, key: password }
+      volumeMounts:
+        - name: cosign-key
+          mountPath: /keys
+          readOnly: true
+    - name: trivy
+      image: aquasec/trivy:0.55.0
+      command: ["sleep"]
+      args: ["9999999"]
     - name: tools
       image: alpine:3.20
       command: ["sleep"]
       args: ["9999999"]
+  volumes:
+    - name: cosign-key
+      secret:
+        secretName: cosign-key
+        optional: true
 '''
     }
   }
@@ -42,6 +76,37 @@ spec:
       }
     }
 
+    stage('Test & vet (Go)') {
+      steps {
+        container('go') {
+          dir('prototype/backend') {
+            sh '''
+              go mod download
+              go vet ./...
+              go test -race -coverprofile=coverage.out ./...
+              go tool cover -func=coverage.out | tail -1
+            '''
+          }
+        }
+      }
+    }
+
+    stage('SAST & SCA') {
+      steps {
+        container('go') {
+          dir('prototype/backend') {
+            sh '''
+              go install golang.org/x/vuln/cmd/govulncheck@latest
+              go install github.com/securego/gosec/v2/cmd/gosec@latest
+              export PATH="$PATH:$(go env GOPATH)/bin"
+              govulncheck ./...
+              gosec -severity medium -confidence medium ./...
+            '''
+          }
+        }
+      }
+    }
+
     stage('Build & push (Kaniko -> ECR)') {
       steps {
         container('kaniko') {
@@ -50,7 +115,48 @@ spec:
               --context="$(pwd)/prototype/backend" \
               --dockerfile="$(pwd)/prototype/backend/Dockerfile" \
               --destination="$ECR:$TAG" \
-              --destination="$ECR:latest"
+              --destination="$ECR:latest" \
+              --digest-file=/workspace/digest
+          '''
+        }
+        script {
+          env.IMAGE_DIGEST = sh(script: "cat /workspace/digest 2>/dev/null || true", returnStdout: true).trim()
+        }
+      }
+    }
+
+    stage('SBOM (syft)') {
+      steps {
+        container('syft') {
+          sh '''
+            syft "$ECR:$TAG" -o spdx-json > sbom.spdx.json
+            syft "$ECR:$TAG" -o table
+          '''
+        }
+        archiveArtifacts artifacts: 'sbom.spdx.json', fingerprint: true
+      }
+    }
+
+    stage('Sign image (cosign)') {
+      when { expression { fileExists('/keys/cosign.key') } }
+      steps {
+        container('cosign') {
+          sh '''
+            REF="$ECR@$IMAGE_DIGEST"; [ -n "$IMAGE_DIGEST" ] || REF="$ECR:$TAG"
+            cosign sign --yes --key /keys/cosign.key "$REF"
+            cosign attach sbom --sbom sbom.spdx.json "$REF" || true
+          '''
+        }
+      }
+    }
+
+    stage('Image scan (trivy)') {
+      steps {
+        container('trivy') {
+          sh '''
+            # Report everything; FAIL the build only on CRITICAL.
+            trivy image --scanners vuln --severity HIGH,CRITICAL --no-progress "$ECR:$TAG" || true
+            trivy image --scanners vuln --severity CRITICAL --exit-code 1 --no-progress "$ECR:$TAG"
           '''
         }
       }
@@ -73,7 +179,7 @@ spec:
   }
 
   post {
-    success { echo "CI OK — pushed $ECR:$TAG and triggered Spinnaker" }
+    success { echo "CI OK — tested, scanned, pushed $ECR:$TAG and triggered Spinnaker" }
     failure { echo "CI FAILED" }
   }
 }
