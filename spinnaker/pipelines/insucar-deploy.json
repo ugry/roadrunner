@@ -152,8 +152,12 @@
     },
     {
       "failPipeline": true,
-      "instructions": "Approve promotion",
+      "instructions": "Approve promotion to UAT. Requires the 'insucar-releasers' or 'insucar-product-owners' role.",
       "judgmentInputs": [],
+      "selectedStageRoles": [
+        "insucar-releasers",
+        "insucar-product-owners"
+      ],
       "name": "Promote to UAT?",
       "refId": "2",
       "requisiteStageRefIds": [
@@ -284,8 +288,11 @@
     },
     {
       "failPipeline": true,
-      "instructions": "Approve promotion",
+      "instructions": "Approve promotion to PROD. Restricted to the 'insucar-product-owners' role (no self-approval by the requester).",
       "judgmentInputs": [],
+      "selectedStageRoles": [
+        "insucar-product-owners"
+      ],
       "name": "Promote to PROD? (product owner)",
       "refId": "4",
       "requisiteStageRefIds": [
