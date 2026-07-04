@@ -84,6 +84,9 @@ func main() {
 	mux.HandleFunc("/api/agent/lookup", requireRole("agent", handleLookup))
 	mux.HandleFunc("/api/agent/dispatch", requireRole("agent", handleDispatch))
 
+	// auth config (Cognito setup exposed to frontends)
+	mux.HandleFunc("/api/auth/config", handleAuthConfig)
+
 	// pages (host-based: op.* -> operators only, apex -> users only)
 	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc(opsPath, serveFile("operator.html"))
@@ -107,6 +110,10 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	// Operators-only surface on op.*
 	if strings.HasPrefix(host, "op.") {
+		if r.URL.Path == "/callback" {
+			http.ServeFile(w, r, "/app/web/cognito-callback.html")
+			return
+		}
 		http.ServeFile(w, r, "/app/web/operator.html")
 		return
 	}
@@ -116,6 +123,8 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "/app/web/landing.html") // marketing landing
 	case "/app", "/login", "/register":
 		http.ServeFile(w, r, "/app/web/enduser.html") // functional user app
+	case "/app/callback":
+		http.ServeFile(w, r, "/app/web/cognito-callback.html")
 	default:
 		http.NotFound(w, r)
 	}
@@ -188,6 +197,17 @@ func requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, withCaller(r, c))
 	}
+}
+
+func handleAuthConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{
+		"cognito":          cognito != nil,
+		"region":           getenv("AWS_REGION", "eu-west-1"),
+		"customerDomain":   getenv("COGNITO_CUSTOMER_DOMAIN", ""),
+		"customerClientId": getenv("COGNITO_CUSTOMER_CLIENT_ID", ""),
+		"staffDomain":      getenv("COGNITO_STAFF_DOMAIN", ""),
+		"staffClientId":    getenv("COGNITO_STAFF_CLIENT_ID", ""),
+	})
 }
 
 // ---------- handlers ----------

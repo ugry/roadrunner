@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Signing in…</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--brand:#0a7d5a;--navy:#0b1f2a;--bg:#f4f8f6;--muted:#5b7183}
+body{margin:0;display:grid;place-items:center;min-height:100vh;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--navy)}
+.card{background:#fff;border-radius:16px;padding:40px;text-align:center;max-width:400px;box-shadow:0 20px 60px rgba(11,31,42,.08)}
+.spin{width:36px;height:36px;border:3px solid #e3ece8;border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error{color:#c0392b;font-size:14px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="spin" id="spinner"></div>
+  <h2 id="title">Signing you in…</h2>
+  <p id="status" style="color:var(--muted)">Exchanging authorization code</p>
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const code = params.get('code');
+const state = params.get('state');
+const error = params.get('error_description') || params.get('error');
+
+if (error) {
+  document.getElementById('title').textContent = 'Sign-in failed';
+  document.getElementById('status').textContent = error;
+  document.getElementById('spinner').style.display = 'none';
+} else if (!code) {
+  document.getElementById('title').textContent = 'Missing code';
+  document.getElementById('status').textContent = 'No authorization code received.';
+  document.getElementById('spinner').style.display = 'none';
+} else {
+  const stored = (() => { try { return JSON.parse(localStorage.getItem('cognito_pkce')); } catch(_) { return null; } })();
+  if (!stored || stored.state !== state) {
+    document.getElementById('title').textContent = 'Invalid state';
+    document.getElementById('status').textContent = 'Session mismatch. Please try signing in again.';
+    document.getElementById('spinner').style.display = 'none';
+  } else {
+    (async () => {
+      const tokenUrl = `https://${stored.domain}.auth.${stored.region}.amazoncognito.com/oauth2/token`;
+      const body = new URLSearchParams();
+      body.set('grant_type', 'authorization_code');
+      body.set('code', code);
+      body.set('redirect_uri', stored.redirectUri);
+      body.set('client_id', stored.clientId);
+      body.set('code_verifier', stored.verifier);
+      try {
+        const res = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        const tokens = await res.json();
+        if (res.ok && tokens.access_token) {
+          localStorage.setItem('cognito_tokens', JSON.stringify({
+            access_token: tokens.access_token,
+            id_token: tokens.id_token,
+            refresh_token: tokens.refresh_token,
+            expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
+            cognito_subject: null
+          }));
+          localStorage.removeItem('cognito_pkce');
+          window.location.href = stored.returnTo || '/';
+        } else {
+          throw new Error(tokens.error_description || tokens.error || 'token exchange failed');
+        }
+      } catch(e) {
+        document.getElementById('title').textContent = 'Sign-in failed';
+        document.getElementById('status').textContent = e.message;
+        document.getElementById('spinner').style.display = 'none';
+      }
+    })();
+  }
+}
+</script>
+</body>
+</html>

@@ -84,6 +84,19 @@ resource "aws_cognito_user_pool_client" "staff_console" {
   logout_urls                          = ["https://op.unysolar.com/"]
 }
 
+# Public SPA client for operator console PKCE (no client secret)
+resource "aws_cognito_user_pool_client" "staff_console_public" {
+  name                                 = "operator-console-pkce"
+  user_pool_id                         = aws_cognito_user_pool.staff.id
+  generate_secret                      = false # public SPA (PKCE)
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  allowed_oauth_flows_user_pool_client = true
+  supported_identity_providers         = ["COGNITO"]
+  callback_urls                        = ["https://op.unysolar.com/callback"]
+  logout_urls                          = ["https://op.unysolar.com/"]
+}
+
 # Spinnaker OAuth client (uses the staff pool + groups for fiat roles)
 resource "aws_cognito_user_pool_client" "staff_spinnaker" {
   name                                 = "insucar-spinnaker"
@@ -170,4 +183,14 @@ output "cognito_staff_domain" {
 
 output "cognito_spinnaker_client_id" {
   value = aws_cognito_user_pool_client.staff_spinnaker.id
+}
+
+output "cognito_customer_client_id" {
+  description = "Public SPA client ID for the consumer app (PKCE)."
+  value       = aws_cognito_user_pool_client.customer_app.id
+}
+
+output "cognito_staff_public_client_id" {
+  description = "Public SPA client ID for the operator console (PKCE)."
+  value       = aws_cognito_user_pool_client.staff_console_public.id
 }

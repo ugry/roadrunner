@@ -27,6 +27,11 @@ data:
   # comma-separated app client ids allowed to call the API
   # (`terraform output cognito_spinnaker_client_id` + console/app client ids)
   COGNITO_CLIENT_IDS: "REPLACE_client_ids"
+  # Frontend Cognito config (fed to /api/auth/config for PKCE OAuth2):
+  COGNITO_CUSTOMER_DOMAIN: "insucar-dev-customer"
+  COGNITO_CUSTOMER_CLIENT_ID: "REPLACE_customer_client_id"
+  COGNITO_STAFF_DOMAIN: "insucar-dev-staff"
+  COGNITO_STAFF_CLIENT_ID: "REPLACE_staff_public_client_id"
   PROVIDER_API_URL: "http://provider-axa.insucar.svc.cluster.local:5678"
   STATUS_LINK_BASE: "https://app.unysolar.com/status"
 ---

@@ -64,6 +64,7 @@
         <label>Email</label><input id="l_email" value="claire.martin@example.fr">
         <label>Password</label><input id="l_pass" type="password" value="Claire#2026">
         <button class="btn btn-primary" onclick="login()">Log in</button>
+        <div id="cognitoLogin" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><button class="btn btn-ghost" onclick="pkceLogin()" style="margin-top:0">Sign in with Cognito</button><div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center">Managed SSO login</div></div>
       </div>
       <div id="reg" class="hidden">
         <h1>Create your account</h1><div class="sub">Register so we already know you and your vehicle when you break down.</div>
@@ -93,12 +94,46 @@
 </div>
 
 <script>
-async function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});o.credentials='include';const r=await fetch(p,o);return{ok:r.ok,status:r.status,body:await r.json().catch(()=>({}))};}
+// --- Cognito config (populated by backend or env; empty = no Cognito login) ---
+const cognitoCfg = { domain: '', region: 'eu-west-1', clientId: '', redirectUri: location.origin + '/app/callback' };
+(async () => { try { const r = await fetch('/api/auth/config'); if (r.ok) { const c = await r.json(); if (c.customerDomain) { cognitoCfg.domain = c.customerDomain; cognitoCfg.region = c.region; cognitoCfg.clientId = c.customerClientId; document.getElementById('cognitoLogin').classList.remove('hidden'); } } } catch (_) {} })();
+
+function pkceLogin() {
+  const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => String.fromCharCode('A'.charCodeAt(0)+b%26)).join('');
+  const encoder = new TextEncoder();
+  crypto.subtle.digest('SHA-256', encoder.encode(verifier)).then(hash => {
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    const state = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2,'0')).join('');
+    localStorage.setItem('cognito_pkce', JSON.stringify({ verifier, state, domain: cognitoCfg.domain, region: cognitoCfg.region, clientId: cognitoCfg.clientId, redirectUri: cognitoCfg.redirectUri, returnTo: '/app' }));
+    const url = `https://${cognitoCfg.domain}.auth.${cognitoCfg.region}.amazoncognito.com/oauth2/authorize?response_type=code&client_id=${encodeURIComponent(cognitoCfg.clientId)}&redirect_uri=${encodeURIComponent(cognitoCfg.redirectUri)}&state=${state}&code_challenge_method=S256&code_challenge=${challenge}&scope=openid+email+profile`;
+    window.location.href = url;
+  });
+}
+
+function bearerApi(p, o) {
+  o = o || {};
+  o.headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
+  var tok = null;
+  try { tok = JSON.parse(localStorage.getItem('cognito_tokens')); } catch (_) {}
+  if (tok && tok.access_token && Date.now() < tok.expires_at) {
+    o.headers['Authorization'] = 'Bearer ' + tok.access_token;
+  } else {
+    o.credentials = 'include';
+  }
+  return fetch(p, o).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, status: r.status, body: b }; }).catch(function() { return { ok: r.ok, status: r.status, body: {} }; }); });
+}
+
+function api(p,o){return bearerApi(p,o);}
 function v(id){return document.getElementById(id).value;}function el(id){return document.getElementById(id);}
 function showTab(t){el('tabLogin').classList.toggle('on',t=='login');el('tabReg').classList.toggle('on',t=='reg');el('login').classList.toggle('hidden',t!='login');el('reg').classList.toggle('hidden',t!='reg');}
 async function login(){const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:v('l_email'),password:v('l_pass')})});if(r.ok)enter(r.body);else el('out').textContent='⚠ '+(r.body.error||'login failed');}
 async function register(){const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:v('r_country'),phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else el('out').textContent='⚠ '+(r.body.error||'register failed');}
-async function logout(){await api('/api/logout',{method:'POST'});location.reload();}
+async function logout(){
+  localStorage.removeItem('cognito_tokens');
+  localStorage.removeItem('cognito_pkce');
+  await api('/api/logout',{method:'POST'});
+  location.reload();
+}
 function enter(me){el('authcard').classList.add('hidden');el('dash').classList.remove('hidden');el('whoami').textContent=me.name||'';el('me2').textContent=me.name||'';el('loginTop').classList.add('hidden');el('logoutTop').classList.remove('hidden');loadCases();}
 async function submitIncident(){const r=await api('/api/user/incident',{method:'POST',body:JSON.stringify({incident:v('i_type'),description:v('i_desc'),address:v('i_addr')})});if(r.ok){alert('Case created: '+r.body.case_number+' — a coordinator will assist you.');loadCases();}else alert('Error: '+(r.body.error||r.status));}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}

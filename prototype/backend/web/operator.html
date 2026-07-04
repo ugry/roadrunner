@@ -463,6 +463,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
         <label style="display:block;font-size:13px;font-weight:600;color:#5b7183;margin-bottom:4px">Password</label>
         <input id="a_pass" type="password" value="Operator#2026" style="width:100%;padding:11px 12px;border:1px solid #e3ece8;border-radius:10px;font:inherit;background:#fbfdfc;color:#0b1f2a">
         <button onclick="alogin()" style="width:100%;margin-top:16px;border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;cursor:pointer;background:#0a7d5a;color:#fff">Sign in</button>
+        <div id="cognitoLoginOp" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid #e3ece8"><button onclick="opPkceLogin()" style="width:100%;border:1px solid #e3ece8;background:#eef4f1;color:#0b1f2a;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;cursor:pointer;margin-top:0">Sign in with Cognito SSO</button><div style="font-size:11px;color:#5b7183;margin-top:6px;text-align:center">Managed identity · MFA enforced</div></div>
         <div id="lerr" style="margin-top:10px;font-size:12px;color:#c0392b"></div>
       </div>
     </div>
@@ -560,13 +561,42 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .qp{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700}.qp.emergency{background:color-mix(in oklab,var(--danger) 20%,transparent);color:var(--danger)}.qp.high{background:color-mix(in oklab,var(--warn) 18%,transparent);color:var(--warn)}.qp.normal{background:color-mix(in oklab,var(--accent) 16%,transparent);color:var(--accent)}</style>
 
 <script>
-async function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});o.credentials='include';const r=await fetch(p,o);return{ok:r.ok,status:r.status,body:await r.json().catch(()=>({}))};}
+// --- Cognito config for operators (populated from backend) ---
+const opCognitoCfg = { domain: '', region: 'eu-west-1', clientId: '', redirectUri: location.origin + '/callback' };
+(async () => { try { const r = await fetch('/api/auth/config'); if (r.ok) { const c = await r.json(); if (c.staffDomain) { opCognitoCfg.domain = c.staffDomain; opCognitoCfg.region = c.region; opCognitoCfg.clientId = c.staffClientId; document.getElementById('cognitoLoginOp').classList.remove('hidden'); } } } catch (_) {} })();
+
+function opPkceLogin() {
+  const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(function(b) { return String.fromCharCode('A'.charCodeAt(0)+b%26); }).join('');
+  const encoder = new TextEncoder();
+  crypto.subtle.digest('SHA-256', encoder.encode(verifier)).then(function(hash) {
+    const challenge = btoa(String.fromCharCode.apply(null, new Uint8Array(hash))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    const state = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b) { return b.toString(16).padStart(2,'0'); }).join('');
+    localStorage.setItem('cognito_pkce', JSON.stringify({ verifier: verifier, state: state, domain: opCognitoCfg.domain, region: opCognitoCfg.region, clientId: opCognitoCfg.clientId, redirectUri: opCognitoCfg.redirectUri, returnTo: '/ops-console-7f3a9c' }));
+    const url = 'https://' + opCognitoCfg.domain + '.auth.' + opCognitoCfg.region + '.amazoncognito.com/oauth2/authorize?response_type=code&client_id=' + encodeURIComponent(opCognitoCfg.clientId) + '&redirect_uri=' + encodeURIComponent(opCognitoCfg.redirectUri) + '&state=' + state + '&code_challenge_method=S256&code_challenge=' + challenge + '&scope=openid+email+profile';
+    window.location.href = url;
+  });
+}
+
+function opBearerApi(p, o) {
+  o = o || {};
+  o.headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
+  var tok = null;
+  try { tok = JSON.parse(localStorage.getItem('cognito_tokens')); } catch (_) {}
+  if (tok && tok.access_token && Date.now() < tok.expires_at) {
+    o.headers['Authorization'] = 'Bearer ' + tok.access_token;
+  } else {
+    o.credentials = 'include';
+  }
+  return fetch(p, o).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, status: r.status, body: b }; }).catch(function() { return { ok: r.ok, status: r.status, body: {} }; }); });
+}
+
+function api(p,o){return opBearerApi(p,o);}
 function v(id){return document.getElementById(id).value;}
 function el(id){return document.getElementById(id);}
 let selCase=null;
-setInterval(()=>{el('clock').textContent=new Date().toLocaleTimeString('en-GB');},1000);
+setInterval(function(){el('clock').textContent=new Date().toLocaleTimeString('en-GB');},1000);
 async function alogin(){const r=await api('/api/agent/login',{method:'POST',body:JSON.stringify({agentID:v('a_id'),password:v('a_pass')})});if(r.ok)enter(r.body);else el('lerr').textContent='⚠ '+(r.body.error||'login failed');}
-async function alogout(){await api('/api/logout',{method:'POST'});location.reload();}
+async function alogout(){localStorage.removeItem('cognito_tokens');localStorage.removeItem('cognito_pkce');await api('/api/logout',{method:'POST'});location.reload();}
 function enter(me){el('loginOverlay').style.display='none';el('a_name').textContent=me.name;el('a_role').textContent=(me.staff_role||'agent')+' · '+(me.agent_id||'');el('a_avatar').textContent=(me.name||'A').split(' ').map(x=>x[0]).join('').slice(0,2);loadQueue();}
 async function loadQueue(){const r=await api('/api/agent/cases');const c=r.body.cases||[];el('q-count').textContent=c.length;el('q-wait').textContent=c.filter(x=>x.status=='triaging'||x.status=='new').length;el('q-active').textContent=c.filter(x=>x.status=='dispatched'||x.status=='en_route'||x.status=='on_site').length;
  if(!c.length){el('queue').textContent='Queue empty.';return;}
