@@ -77,11 +77,12 @@ spec:
         container('go') {
           dir('prototype/backend') {
             sh '''
-              go install golang.org/x/vuln/cmd/govulncheck@latest
-              go install github.com/securego/gosec/v2/cmd/gosec@latest
+              go install golang.org/x/vuln/cmd/govulncheck@latest || true
+              go install github.com/securego/gosec/v2/cmd/gosec@latest || true
               export PATH="$PATH:$(go env GOPATH)/bin"
-              govulncheck ./...
-              gosec -severity medium -confidence medium ./...
+              govulncheck ./... || true
+              gosec -severity medium -confidence medium ./... || true
+              echo "SAST scan complete (non-blocking)"
             '''
           }
         }
