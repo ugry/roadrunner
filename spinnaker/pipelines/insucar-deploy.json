@@ -6,6 +6,30 @@
   "limitConcurrent": true,
   "name": "deploy-insucar-api",
   "schema": "1",
+  "parameterConfig": [
+    {
+      "name": "imageTag",
+      "default": "latest",
+      "description": "ECR image tag to deploy. Set by the Jenkins CI webhook (parameters.imageTag); falls back to 'latest' for manual runs.",
+      "required": false,
+      "pinned": true,
+      "hasOptions": false
+    },
+    {
+      "name": "gitCommit",
+      "default": "unknown",
+      "description": "Git commit SHA that produced this image (traceability; set by CI).",
+      "required": false,
+      "hasOptions": false
+    },
+    {
+      "name": "gitAuthor",
+      "default": "unknown",
+      "description": "Git commit author that produced this image (traceability; set by CI).",
+      "required": false,
+      "hasOptions": false
+    }
+  ],
   "stages": [
     {
       "account": "insucar-eks",
@@ -55,7 +79,7 @@
                         "value": "eu-west-1"
                       }
                     ],
-                    "image": "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:2",
+                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
                     "name": "insucar-api",
                     "ports": [
                       {
@@ -180,7 +204,7 @@
                         "value": "eu-west-1"
                       }
                     ],
-                    "image": "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:2",
+                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
                     "name": "insucar-api",
                     "ports": [
                       {
@@ -307,7 +331,7 @@
                         "value": "eu-west-1"
                       }
                     ],
-                    "image": "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:2",
+                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
                     "name": "insucar-api",
                     "ports": [
                       {
