@@ -21,28 +21,13 @@ spec:
       resources:
         requests: { cpu: "250m", memory: "512Mi" }
     - name: syft
-      image: anchore/syft:v1.14.1
-      command: ["sleep"]
-      args: ["9999999"]
-    - name: cosign
-      image: gcr.io/projectsigstore/cosign:v2.4.1
-      command: ["sleep"]
-      args: ["9999999"]
-      env:
-        # cosign signing key material, provided out-of-band as a k8s secret:
-        #   kubectl -n jenkins create secret generic cosign-key \\
-        #     --from-file=cosign.key=cosign.key --from-literal=password=<PW>
-        - name: COSIGN_PASSWORD
-          valueFrom:
-            secretKeyRef: { name: cosign-key, key: password }
-      volumeMounts:
-        - name: cosign-key
-          mountPath: /keys
-          readOnly: true
+      image: alpine:3.20
+      command: ["sh", "-c"]
+      args: ["apk add --no-cache curl && curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin && while true; do sleep 86400; done"]
     - name: trivy
-      image: aquasec/trivy:0.55.0
-      command: ["sleep"]
-      args: ["9999999"]
+      image: alpine:3.20
+      command: ["sh", "-c"]
+      args: ["apk add --no-cache curl rpm && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin && while true; do sleep 86400; done"]
     - name: tools
       image: alpine:3.20
       command: ["sleep"]
@@ -52,7 +37,6 @@ spec:
       secret:
         secretName: cosign-key
         optional: true
-'''
     }
   }
 
@@ -149,19 +133,6 @@ spec:
           '''
         }
         archiveArtifacts artifacts: 'sbom.spdx.json', fingerprint: true
-      }
-    }
-
-    stage('Sign image (cosign)') {
-      when { expression { fileExists('/keys/cosign.key') } }
-      steps {
-        container('cosign') {
-          sh '''
-            REF="$ECR@$IMAGE_DIGEST"; [ -n "$IMAGE_DIGEST" ] || REF="$ECR:$TAG"
-            cosign sign --yes --key /keys/cosign.key "$REF"
-            cosign attach sbom --sbom sbom.spdx.json "$REF" || true
-          '''
-        }
       }
     }
 
