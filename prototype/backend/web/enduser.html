@@ -20,7 +20,8 @@
   .sub{color:var(--muted);font-size:14px;margin-bottom:16px}
   label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
   input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;color:var(--fg);background:#fbfdfc}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(10,125,90,.15)}
+   input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:2px;border-color:var(--brand);box-shadow:0 0 0 3px rgba(10,125,90,.4)}
+   button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   .row{display:flex;gap:12px}.row>div{flex:1}
   .btn{border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-top:14px}
   .btn-primary{background:var(--brand);color:#fff}.btn-primary:hover{background:var(--brand-d)}
@@ -41,7 +42,11 @@
   .case-no{font-weight:800;font-size:14px}
   .case-type{font-size:12px;color:var(--muted);text-transform:capitalize;margin-top:3px}
   .case-desc{margin-top:6px;font-size:14px;line-height:1.45;word-break:break-word;overflow-wrap:anywhere;white-space:normal}
-  #cases{max-height:60vh;overflow-y:auto}
+   #cases{max-height:60vh;overflow-y:auto}
+   .wiz-steps{display:flex;gap:4px;margin-bottom:16px}.wiz-step{flex:1;height:4px;border-radius:2px;background:var(--line)}.wiz-step.done{background:var(--brand)}.wiz-step.now{background:var(--brand);box-shadow:0 0 6px rgba(10,125,90,.5)}
+   .panic-btn{display:flex;align-items:center;gap:8px;background:#fff5f5;border:2px solid #e74c3c;border-radius:10px;padding:10px 14px;font-weight:700;font-size:13px;color:#e74c3c;cursor:pointer;width:100%;text-align:left;margin:8px 0}.panic-btn:hover{background:#ffeaea}
+   .wiz-nav{display:flex;justify-content:space-between;gap:10px;margin-top:16px}.wiz-nav button{flex:1}
+   @media(prefers-contrast:more){:root{--line:#8b9ea7;--muted:#4a5568;--fg:#000}.card{border-width:2px}.btn{font-weight:800}}
 </style></head>
 <body>
 <div class="bar">
