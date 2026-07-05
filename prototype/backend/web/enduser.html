@@ -85,7 +85,8 @@
         <h1>Create your account</h1><div class="sub">Register so we already know you and your vehicle when you break down.</div>
         <div class="row"><div><label>First name</label><input id="r_first" placeholder="Your first name"></div><div><label>Last name</label><input id="r_last" placeholder="Your last name"></div></div>
         <label>Email</label><input id="r_email" placeholder="you@example.com">
-        <div class="row"><div><label>Country</label><select id="r_country"><option>FR</option><option>GB</option><option>DE</option></select></div><div><label>Mobile (E.164)</label><input id="r_phone" placeholder="+33600000009"></div></div>
+        <div class="row"><div><label>Country</label><select id="r_country"><option>FR</option><option>GB</option><option>DE</option><option>ES</option><option>IT</option><option>NL</option><option>BE</option><option>CH</option><option>PT</option><option>PL</option><option>AT</option><option>SE</option><option>DK</option><option>NO</option><option>FI</option><option>IE</option><option>CZ</option><option>HU</option><option>RO</option><option>GR</option><option>US</option><option>CA</option><option>AU</option><option value="">Other (enter code)</option></select>
+        <input id="r_country_other" placeholder="e.g. TR, JP, BR" maxlength="2" style="margin-top:4px;display:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'').slice(0,2)"></div><div><label>Mobile (E.164)</label><input id="r_phone" placeholder="+33600000009"></div></div>
         <label>Password</label><input id="r_pass" type="password">
         <button class="btn btn-primary" onclick="register()">Create account &amp; sign in</button>
       </div>
@@ -149,7 +150,10 @@ function api(p,o){return bearerApi(p,o);}
 function v(id){return document.getElementById(id).value;}function el(id){return document.getElementById(id);}
 function showTab(t){el('tabLogin').classList.toggle('on',t=='login');el('tabReg').classList.toggle('on',t=='reg');el('login').classList.toggle('hidden',t!='login');el('reg').classList.toggle('hidden',t!='reg');}
 async function login(){const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:v('l_email'),password:v('l_pass')})});if(r.ok)enter(r.body);else el('out').textContent='⚠ '+(r.body.error||'login failed');}
-async function register(){const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:v('r_country'),phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else el('out').textContent='⚠ '+(r.body.error||'register failed');}
+async function register(){
+  var country = v('r_country');
+  if (!country) country = v('r_country_other') || 'FR';
+  const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:country,phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else el('out').textContent='⚠ '+(r.body.error||'register failed');}
 async function logout(){
   localStorage.removeItem('cognito_tokens');
   localStorage.removeItem('cognito_pkce');
@@ -438,6 +442,15 @@ function showPhrases(lang) {
   el('phraseCards').innerHTML = h;
 }
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
+// #60: Country dropdown — show manual input for "Other"
+document.addEventListener('DOMContentLoaded', function() {
+  var sel = document.getElementById('r_country');
+  if (sel) sel.addEventListener('change', function() {
+    var other = document.getElementById('r_country_other');
+    if (this.value === '') { other.style.display = 'block'; other.focus(); }
+    else other.style.display = 'none';
+  });
+});
 // Apply saved language
 var savedLang = localStorage.getItem('insucar_lang') || 'en';
 if (savedLang !== 'en') {

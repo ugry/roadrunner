@@ -328,6 +328,8 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(in.Email)
 	phone := strings.TrimSpace(in.Phone)
 	password := in.Password
+	country := strings.TrimSpace(in.Country)
+	lang := strings.TrimSpace(in.Language)
 
 	var errs []string
 	if first == "" { errs = append(errs, "first name required") }
@@ -342,6 +344,11 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	if len(password) < 8 {
 		errs = append(errs, "password must be at least 8 characters")
 	}
+	// #60: Country code validation — must be 2-letter ISO code
+	if len(country) != 2 || country == "OT" {
+		errs = append(errs, "country code must be 2 letters (ISO, e.g. FR, GB, DE)")
+	}
+	country = strings.ToUpper(country)
 	// E2: GDPR consent enforcement
 	hasTerms := false
 	for _, c := range in.Consents {
