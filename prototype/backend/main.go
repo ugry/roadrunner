@@ -87,6 +87,7 @@ func main() {
 	mux.HandleFunc("/api/connect/lex", handleLexTriage)
 	mux.HandleFunc("/api/connect/psap", handlePsapTransfer)
 	mux.HandleFunc("/api/pinpoint/callback", handlePinpointCallback)
+	mux.HandleFunc("/api/push/send", requireRole("agent", handlePushSend))
 
 	// user (customer) — requires user session
 	mux.HandleFunc("/api/user/incident", requireRole("user", handleUserIncident))
@@ -419,18 +420,21 @@ func handleUserCases(w http.ResponseWriter, r *http.Request) {
 		uid = c.ID
 	}
 	rows, _ := db.Query(r.Context(),
-		`SELECT id, case_number,status::text,incident::text,coalesce(symptom_description,''),created_at,
-		        coalesce(satisfaction_score,0), coalesce(resolution_notes,'')
-		 FROM cases WHERE customer_id=$1 ORDER BY created_at DESC`, uid)
+		`SELECT id, case_number,status::text,incident::text,coalesce(ca.symptom_description,''),ca.created_at,
+		        coalesce(ca.satisfaction_score,0), coalesce(ca.resolution_notes,''),
+		        coalesce(m.eta_minutes,0)
+		 FROM cases ca
+		 LEFT JOIN missions m ON m.case_id = ca.id AND m.status NOT IN ('failed','cancelled')
+		 WHERE ca.customer_id=$1 ORDER BY ca.created_at DESC`, uid)
 	defer rows.Close()
 	var out []map[string]any
 	for rows.Next() {
 		var id, no, st, inc, desc, notes string
-		var score int
+		var score, etaMin int
 		var ts time.Time
-		rows.Scan(&id, &no, &st, &inc, &desc, &ts, &score, &notes)
+		rows.Scan(&id, &no, &st, &inc, &desc, &ts, &score, &notes, &etaMin)
 		out = append(out, map[string]any{"id": id, "case_number": no, "status": st, "incident": inc,
-			"description": desc, "created_at": ts, "score": score, "notes": notes})
+			"description": desc, "created_at": ts, "score": score, "notes": notes, "eta_minutes": etaMin})
 	}
 	writeJSON(w, 200, map[string]any{"cases": out})
 }
@@ -995,6 +999,35 @@ func handleCaseRate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, map[string]any{"case_id": in.CaseID, "score": in.Score, "status": "rated"})
+}
+
+// G5: Push notification sender — stores subscription + sends via SSE fallback
+var pushSubscriptions []map[string]any
+
+func handlePushSend(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Title string `json:"title"`
+		Body  string `json:"body"`
+		URL   string `json:"url"`
+	}
+	json.NewDecoder(r.Body).Decode(&in)
+	// Store subscription for web-push (future)
+	if r.Method == "PUT" {
+		var sub map[string]any
+		json.NewDecoder(r.Body).Decode(&sub)
+		if sub["endpoint"] != nil {
+			pushSubscriptions = append(pushSubscriptions, sub)
+		}
+		writeJSON(w, 200, map[string]string{"status": "subscribed"})
+		return
+	}
+	// Broadcast push event via SSE to all operator consoles
+	publishSSE("push.notification", map[string]any{
+		"title": nz(in.Title, "Insucar"),
+		"body":  nz(in.Body, "Update on your case"),
+		"url":   nz(in.URL, "/app"),
+	})
+	writeJSON(w, 200, map[string]string{"status": "broadcast", "subscribers": fmt.Sprintf("%d", len(pushSubscriptions))})
 }
 
 // Case arrived: motorist confirms provider has arrived on scene.

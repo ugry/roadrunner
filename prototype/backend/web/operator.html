@@ -450,6 +450,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
         <div class="panel">
           <div class="panel-head"><div class="panel-title">Screen Pop — case detail</div><span class="tag" id="c_no">no case selected</span></div>
           <div class="panel-body">
+            <!-- G1: Photo viewer -->
+            <div id="casePhoto" style="display:none;margin-bottom:10px;text-align:center">
+              <img id="casePhotoImg" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--border)" alt="Case photo">
+            </div>
+          <div class="panel-body">
             <div class="screenpop">
               <div class="pop-caller">
                 <div class="pop-photo" id="c_initials">–</div>
@@ -615,6 +620,15 @@ function updateProviderOnMap(provName, provLat, provLng) {
   providerMarker = L.marker([provLat, provLng], {
     icon: L.divIcon({ className: '', html: '<div style="width:22px;height:22px;background:var(--accent);border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px var(--accent)"></div>', iconSize: [22, 22], iconAnchor: [11, 11] })
   }).bindPopup(popup).addTo(liveMap);
+  // G3: Animate provider toward incident if we have both locations
+  if (incidentLat && incidentLng && (Math.abs(provLat - incidentLat) > 0.001 || Math.abs(provLng - incidentLng) > 0.001)) {
+    var sLat = provLat, sLng = provLng, iLat = incidentLat, iLng = incidentLng, step = 0, steps = 40;
+    var anim = setInterval(function() {
+      step++; var t = step/steps; var lat = sLat + (iLat - sLat)*t; var lng = sLng + (iLng - sLng)*t;
+      providerMarker.setLatLng([lat, lng]);
+      if (step >= steps) { clearInterval(anim); providerMarker.bindPopup('<b>'+(provName||'Provider')+'</b><br>📍 Arrived').openPopup(); }
+    }, 1500);
+  }
 }
 let providersData = [];
 let statsData = {};
@@ -959,6 +973,13 @@ function populateCase(d) {
   // Dispatch
   el('dispatchBtn').disabled = false;
 
+  // G1: Show photo if available
+  var photoUrl = (d.notes || '').match(/\/api\/photo\/[^\s\]"]+/);
+  if (photoUrl) {
+    el('casePhoto').style.display = 'block';
+    el('casePhotoImg').src = photoUrl[0];
+  } else { el('casePhoto').style.display = 'none'; }
+
   // Mission data
   if (d.mission && d.mission.provider) {
     var drv = d.mission.driver || {};
@@ -1006,6 +1027,8 @@ async function incoming() {
   if (!p.matched) { el('popline').textContent = 'Unknown caller — create case manually'; return; }
   var sp = p.screen_pop;
   el('popline').innerHTML = '📞 <b>' + sp.customer.first_name + ' ' + sp.customer.last_name + '</b> · ' + sp.policy.policy_number + ' · ' + sp.vehicle.make + ' ' + sp.vehicle.model;
+  // G4: Lex auto-triage
+  try { var lr = await fetch('/api/connect/lex', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intent: 'breakdown', confidence: 0.85 }) }); if (lr.ok) { var ld = await lr.json(); el('popline').innerHTML += '<br><span style="font-size:11px;color:var(--accent)">🤖 Lex: ' + ld.intent + ' (' + ld.priority + ')</span>'; } } catch(e) {}
   await loadQueue();
   // P0-3: screen-pop auto-bind — auto-open the first matching case or latest case
   await new Promise(function(rs) { setTimeout(rs, 400); }); // wait for queue DOM update

@@ -237,6 +237,37 @@ function checkBattery() {
   }
 }
 setTimeout(checkBattery, 3000);
+// G6: Offline incident queue
+var offlineQueue = JSON.parse(localStorage.getItem('insucar_offline')||'[]');
+setInterval(async function() {
+  if (!offlineQueue.length) return;
+  for (var i = offlineQueue.length-1; i >= 0; i--) {
+    try { var r = await api('/api/user/incident', { method: 'POST', body: JSON.stringify(offlineQueue[i]) }); if (r.ok) offlineQueue.splice(i, 1); } catch(e) { break; }
+  }
+  localStorage.setItem('insucar_offline', JSON.stringify(offlineQueue));
+  if (!offlineQueue.length) loadCases();
+}, 30000);
+// G7: Dark mode toggle
+var darkOn = localStorage.getItem('insucar_dark') === '1';
+if (darkOn) document.documentElement.style.filter = 'invert(.9) hue-rotate(180deg)';
+function toggleDark() {
+  darkOn = !darkOn; localStorage.setItem('insucar_dark', darkOn ? '1' : '0');
+  document.documentElement.style.filter = darkOn ? 'invert(.9) hue-rotate(180deg)' : '';
+}
+setTimeout(function() {
+  var bar = document.querySelector('.bar'); if (bar) { var b = document.createElement('button'); b.className = 'topbtn'; b.textContent = darkOn ? '☀️' : '🌙'; b.onclick = function() { toggleDark(); b.textContent = darkOn ? '☀️' : '🌙'; }; b.style.marginLeft = '8px'; bar.appendChild(b); }
+}, 500);
+// G2: ETA countdown updater
+setInterval(function() {
+  document.querySelectorAll('.eta-live').forEach(function(el) {
+    var eta = parseInt(el.dataset.eta) || 0;
+    var started = parseInt(el.dataset.started) || Date.now();
+    var elapsed = Math.round((Date.now() - started) / 60000);
+    var remaining = Math.max(0, eta - elapsed);
+    el.textContent = remaining > 0 ? ('🚚 ~' + remaining + ' min') : '📍 Arriving now';
+    el.style.color = remaining < 5 ? 'var(--amber)' : 'var(--brand)';
+  });
+}, 15000);
 
 async function submitIncident() {
   // If photo attached, upload it first
@@ -254,7 +285,7 @@ async function submitIncident() {
   }
   var body = { incident: v('i_type'), description: v('i_desc'), address: v('i_addr'),
                lat: sessionStorage.getItem('gps_lat') || '', lng: sessionStorage.getItem('gps_lng') || '',
-               photo_id: photoId };
+               photo_id: photoId, transcript: sessionStorage.getItem('voice_transcript') || '' };
   var r = await api('/api/user/incident', { method: 'POST', body: JSON.stringify(body) });
   if (r.ok) { showBanner('✅ Case '+r.body.case_number+' — tracking live below','success'); showPostSubmitTracking(r.body.case_number); loadCases(); }
   else showBanner('⚠ '+(r.body.error||'Request failed'),'error');
@@ -318,8 +349,10 @@ async function loadCases(){const r=await api('/api/user/cases');const c=r.body.c
   if(x.description) h+='<div class="case-desc">'+esc(x.description)+'</div>';
   if(x.status==='dispatched'||x.status==='en_route'){
     h+='<button class="btn btn-primary" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="confirmArrival(\''+x.id+'\')">✅ Provider has arrived</button>';
-    h+='<div style="margin-top:4px"><input type="file" accept="image/*" capture="environment" style="font-size:11px;width:auto" onchange="uploadPostPhoto(\''+x.id+'\',this)" aria-label="Add photo after submission"><span style="font-size:10px;color:var(--muted)"> Add photo</span></div>';
+    h+='<div style="margin-top:4px"><input type="file" accept="image/*" capture="environment" style="font-size:11px;width:auto" onchange="uploadPostPhoto(\''+x.id+'\',this)" aria-label="Add photo"><span style="font-size:10px;color:var(--muted)"> Add photo</span></div>';
     h+='<span class="pill" style="background:#e6f4ee;color:var(--brand);margin-left:4px;font-size:10px">✓ Verified provider</span>';
+    // G2: ETA countdown
+    if(x.eta_minutes) h+='<div class="eta-live" style="margin-top:6px;font-size:13px;color:var(--brand);font-weight:700" data-eta="'+x.eta_minutes+'" data-started="'+Date.now()+'">🚚 ~'+x.eta_minutes+' min</div>';
   }
   if(x.status==='resolved'&&!rated){
     h+='<div class="rating" style="margin-top:8px;display:flex;gap:4px">';
@@ -365,6 +398,7 @@ function startVoiceGuidance() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var rec = new SR(); rec.lang = 'en-US'; rec.interimResults = false;
   rec.onresult = function(e) { var t = e.results[0][0].transcript.toLowerCase();
+    sessionStorage.setItem('voice_transcript', t); // G8: store for submission
     if (t.includes('breakdown')||t.includes('start')) el('i_type').value='breakdown';
     if (t.includes('accident')||t.includes('crash')) el('i_type').value='accident';
     if (t.includes('tyre')||t.includes('flat')) el('i_type').value='flat_tyre';
