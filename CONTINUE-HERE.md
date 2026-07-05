@@ -3,7 +3,22 @@
 Purpose: everything an agent needs to resume this project without re-discovery.
 Repo: https://github.com/ugry/insucar (private) · cloned locally at /tmp/insucar
 AWS: account 326804802908, region eu-west-1 · Domain: unysolar.com (Route53 zone Z06143773JJ0DPRILPDA0)
-Last updated: 2026-07-03 (evening)
+Last updated: 2026-07-05 (rich operator console deployed)
+
+## Rich operator console DONE (2026-07-05)
+- ✅ Auto-refresh queue every 8 seconds with new-case flash animation
+- ✅ SLA aging timers (longest wait, avg dispatch, case age bar with breach coloring)
+- ✅ Provider fallback UI: dynamic provider list from API, click-to-select, availability windows check
+- ✅ Coverage decision panel: coverage level, excess, callout limits, entitlements
+- ✅ Safety triage panel: pre-fill from DB, severity assessment
+- ✅ Operator status management: on-call/ACW/offline toggle
+- ✅ Mission timeline rendered from mission_status_events
+- ✅ Service selector grid (tow, roadside repair, jump start, tyre, lockout, fuel)
+- ✅ New backend endpoints: /api/agent/providers, /api/agent/stats, /api/agent/status
+- ✅ Enhanced /api/agent/case: returns created_at, coverage details, safety info, mission timeline
+- ✅ Enhanced /api/agent/dispatch: accepts optional provider_id for fallback selection
+- ✅ DB migration: db/schema-v6-operator.sql (dispatched_at, operator status)
+- Live image: insucar-api:12 (Jenkins build #12, verified all endpoints HTTP 200/401 as expected)
 
 ## Dev rollout VALIDATED end-to-end, then torn down for cost (2026-07-04)
 - vCPU quota raised 8 -> 32 (approved). Applied the FULL managed stack to a `dev` workspace
@@ -30,7 +45,7 @@ Last updated: 2026-07-03 (evening)
   * https://unysolar.com/  (+www) -> premium marketing landing (OD "stripe", golden-ratio); logo shield.
   * https://unysolar.com/app       -> functional user app: login/register -> request assistance -> my cases.
   * https://op.unysolar.com/        -> operator console: agent login -> live queue -> screen-pop -> dispatch.
-- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:casecards.
+- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:12 (Jenkins build 12, rich operator console).
 - Auth (demo): users by EMAIL, agents by AGENT_ID (HMAC cookie sessions). Creds in access.md.
   Users: claire.martin@example.fr / Claire#2026 (+john,+lukas). Agents: OP-1001/Operator#2026 (+SUP-2001,PO-3001).
 - Backend: single Go service prototype/backend/main.go; endpoints /api/user/*, /api/agent/*,
@@ -90,11 +105,9 @@ export PATH="$HOME/.local/bin:$PATH"
 2. Trigger pipeline: python3 /tmp/spin_pipeline.py  (or POST /pipelines/insucar/deploy-insucar-api).
    Pipeline def committed at spinnaker/pipelines/insucar-deploy.json. Manifests in k8s/.
 
-## NEXT STEPS (priority order) — updated 2026-07-03 evening
+## NEXT STEPS (priority order) — updated 2026-07-05
 1. Replace demo auth with Amazon Cognito (customer/staff/partner user pools, MFA); wire the 3 apps to OIDC.
-2. Make operator console fully live/rich: auto-refresh queue, real screen-pop auto-open on incoming,
-   coverage-decision action, provider choice + fallback UI, SLA/aging timers, notes/timeline UI.
-   (Consider carrying the light brand into the console body, or keep dark — ask user.)
+2. ✅ DONE — Rich operator console (auto-refresh, SLA timers, provider fallback, coverage, triage, timeline)
 3. Multi-tenant in code: resolve tenant by host/JWT and SET app.current_tenant so RLS engages.
 4. Real telephony: swap mock Connect for live Amazon Connect + Lex; Pinpoint SMS out of sandbox.
 5. Real provider connectors (AXA Roadside Missioning / Towpal) via the connector registry + webhooks.
