@@ -50,6 +50,7 @@ func main() {
 		log.Fatalf("db connect failed: %v", err)
 	}
 	log.Println("connected to database")
+	loadRateLimits()
 	if cfg, e := awscfg.LoadDefaultConfig(context.Background()); e == nil {
 		snsClient = sns.NewFromConfig(cfg)
 		initEvents(cfg)
@@ -104,11 +105,11 @@ func main() {
 	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
 	mux.HandleFunc("/api/case/arrived", requireRole("user", handleCaseArrived))
 
-	// admin — requires staff session with admin/product_owner group
-	mux.HandleFunc("/api/admin/rate-limits", requireRole("agent", handleAdminRateLimits))
-	mux.HandleFunc("/api/admin/api-access", requireRole("agent", handleAdminApiAccess))
-	mux.HandleFunc("/api/admin/operators", requireRole("agent", handleAdminOperators))
-	mux.HandleFunc("/api/admin/stats", requireRole("agent", handleAdminStats))
+	// admin — requires staff session with admin/supervisor/product_owner role
+	mux.HandleFunc("/api/admin/rate-limits", requireAdmin(handleAdminRateLimits))
+	mux.HandleFunc("/api/admin/api-access", requireAdmin(handleAdminApiAccess))
+	mux.HandleFunc("/api/admin/operators", requireAdmin(handleAdminOperators))
+	mux.HandleFunc("/api/admin/stats", requireAdmin(handleAdminStats))
 	mux.HandleFunc("/api/agent/predict-eta", requireRole("agent", handlePredictEta))
 	mux.HandleFunc("/api/agent/safety-triage", requireRole("agent", handleSafetyTriage))
 
@@ -1166,51 +1167,64 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 
 type rateLimitConfig struct {
 	Endpoint string `json:"endpoint"`
-	RPM      int    `json:"rpm"`       // requests per minute
-	Burst    int    `json:"burst"`     // max burst size
+	RPM      int    `json:"rpm"`
+	Burst    int    `json:"burst"`
 	Enabled  bool   `json:"enabled"`
 }
 
-var rateLimits = map[string]rateLimitConfig{
-	"/api/register":                  {"/api/register", 10, 5, true},
-	"/api/user/login":                {"/api/user/login", 20, 10, true},
-	"/api/agent/login":               {"/api/agent/login", 20, 10, true},
-	"/api/telephony/mock/incoming":   {"/api/telephony/mock/incoming", 60, 30, true},
-	"/api/user/incident":             {"/api/user/incident", 30, 15, true},
+var rateLimits = map[string]rateLimitConfig{}
+
+// GAP-1: Persistent rate limits loaded from DB on startup
+func loadRateLimits() {
+	if db == nil { return }
+	rows, err := db.Query(context.Background(), `SELECT endpoint, rpm, burst, enabled FROM rate_limits`)
+	if err != nil { return }
+	defer rows.Close()
+	for rows.Next() {
+		var rl rateLimitConfig
+		rows.Scan(&rl.Endpoint, &rl.RPM, &rl.Burst, &rl.Enabled)
+		rateLimits[rl.Endpoint] = rl
+	}
+}
+
+func requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c, ok := resolveCaller(r)
+		if !ok || c.Role != "agent" {
+			writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+			return
+		}
+		var staffRole string
+		db.QueryRow(r.Context(), `SELECT COALESCE(role::text,'operator') FROM staff WHERE id=$1`, c.ID).Scan(&staffRole)
+		if staffRole != "admin" && staffRole != "product_owner" && staffRole != "supervisor" {
+			writeJSON(w, 403, map[string]string{"error": "admin access required"})
+			return
+		}
+		next(w, withCaller(r, c))
+	}
 }
 
 func handleAdminRateLimits(w http.ResponseWriter, r *http.Request) {
-	c, _ := callerFrom(r)
-	if c == nil || c.Role != "agent" {
-		writeJSON(w, 403, map[string]string{"error": "admin only"})
-		return
-	}
 	switch r.Method {
 	case "GET":
-		endpoint := r.URL.Query().Get("endpoint")
-		if endpoint != "" {
-			if rl, ok := rateLimits[endpoint]; ok {
-				writeJSON(w, 200, rl)
-				return
-			}
-			writeJSON(w, 404, map[string]string{"error": "endpoint not found"})
-			return
-		}
-		all := make([]rateLimitConfig, 0, len(rateLimits))
-		for _, rl := range rateLimits {
+		rows, err := db.Query(r.Context(), `SELECT endpoint, rpm, burst, enabled FROM rate_limits ORDER BY endpoint`)
+		if err != nil { writeJSON(w, 500, map[string]string{"error": "db error"}); return }
+		defer rows.Close()
+		var all []rateLimitConfig
+		for rows.Next() {
+			var rl rateLimitConfig
+			rows.Scan(&rl.Endpoint, &rl.RPM, &rl.Burst, &rl.Enabled)
 			all = append(all, rl)
 		}
+		if all == nil { all = []rateLimitConfig{} }
 		writeJSON(w, 200, map[string]any{"rate_limits": all})
 	case "PUT":
 		var in rateLimitConfig
 		json.NewDecoder(r.Body).Decode(&in)
-		if in.Endpoint == "" {
-			writeJSON(w, 400, map[string]string{"error": "endpoint required"})
-			return
-		}
-		rateLimits[in.Endpoint] = in
-		db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('admin.rate_limit.update',$1,$2)`,
-			c.ID, fmt.Sprintf(`{"endpoint":"%s","rpm":%d}`, in.Endpoint, in.RPM))
+		if in.Endpoint == "" { writeJSON(w, 400, map[string]string{"error": "endpoint required"}); return }
+		db.Exec(r.Context(), `INSERT INTO rate_limits(endpoint,rpm,burst,enabled) VALUES($1,$2,$3,$4)
+			ON CONFLICT(endpoint) DO UPDATE SET rpm=$2,burst=$3,enabled=$4,updated_at=now()`,
+			in.Endpoint, in.RPM, in.Burst, in.Enabled)
 		writeJSON(w, 200, in)
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
