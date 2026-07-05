@@ -159,24 +159,10 @@ spec:
         }
       }
     }
-
-    stage('Direct deploy (kubectl fallback)') {
-      steps {
-        container('tools') {
-          sh '''
-            apk add --no-cache aws-cli curl jq 2>/dev/null
-            aws eks update-kubeconfig --name insucar --region eu-west-1
-            kubectl -n insucar set image deployment/insucar-api insucar-api=${ECR}:${TAG} --record
-            kubectl -n insucar rollout status deployment/insucar-api --timeout=120s
-            echo "kubectl deploy complete: ${ECR}:${TAG}"
-          ''' || true
-        }
-      }
-    }
   }
 
   post {
-    success { echo "CI OK — tested, scanned, pushed $ECR:$TAG and deployed" }
+    success { echo "CI OK — tested, scanned, pushed $ECR:$TAG and triggered Spinnaker" }
     failure { echo "CI FAILED" }
   }
 }
