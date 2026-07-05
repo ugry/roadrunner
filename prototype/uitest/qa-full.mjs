@@ -63,6 +63,65 @@ const browser = await puppeteer.launch({
 const ctx = browser.defaultBrowserContext();
 await ctx.overridePermissions(BASE, ['clipboard-read']);
 
+console.log('--- PRE-FLIGHT VISUAL CHECKS ---');
+
+// V0: Verify .hidden CSS class actually hides elements
+// This test catches the #1 class of visual bugs: CSS classes without CSS rules
+await test('CORE: .hidden CSS class works (display:none)', async () => {
+  // Test on LANDING page
+  const hp = await browser.newPage();
+  await hp.goto(BASE + '/', { waitUntil: 'networkidle0', timeout: 10000 });
+  const landingWorks = await hp.evaluate(() => {
+    const d = document.createElement('div');
+    d.className = 'hidden'; d.textContent = 'HIDDEN_TEST';
+    document.body.appendChild(d);
+    const hidden = window.getComputedStyle(d).display === 'none';
+    document.body.removeChild(d);
+    return hidden;
+  });
+  await hp.close();
+
+  // Test on REGISTRATION page  
+  const rp = await browser.newPage();
+  await rp.goto(BASE + '/register-page', { waitUntil: 'networkidle0', timeout: 10000 });
+  const regWorks = await rp.evaluate(() => {
+    const d = document.createElement('div');
+    d.className = 'hidden'; d.textContent = 'HIDDEN_TEST';
+    document.body.appendChild(d);
+    const hidden = window.getComputedStyle(d).display === 'none';
+    document.body.removeChild(d);
+    return hidden;
+  });
+  await rp.close();
+
+  if (!landingWorks) throw new Error('LANDING PAGE: .hidden class missing display:none');
+  if (!regWorks) throw new Error('REGISTRATION PAGE: .hidden class missing display:none');
+  console.log('    [landing: OK, registration: OK]');
+});
+
+// V0b: Registration page state isolation — ONLY form OR success, never both
+await test('CORE: Registration page state isolation (not both)', async () => {
+  const rp = await browser.newPage();
+  await rp.goto(BASE + '/register-page', { waitUntil: 'networkidle0', timeout: 10000 });
+  
+  const states = await rp.evaluate(() => {
+    const getVisible = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const s = window.getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetHeight > 0;
+    };
+    return { form: getVisible('formCard'), success: getVisible('successCard') };
+  });
+  await rp.close();
+  
+  if (states.form && states.success) {
+    throw new Error('BOTH form and success cards visible — user sees "Create Account" AND "Account created!" simultaneously');
+  }
+  if (!states.form) throw new Error('Form card NOT visible on initial load');
+  console.log(`    [form=${states.form}, success=${states.success}]`);
+});
+
 console.log('--- END-USER APP ---');
 
 // ---- LANDING PAGE ----
@@ -194,6 +253,17 @@ console.log('\n--- OPERATOR CONSOLE ---');
 
 const op = await browser.newPage();
 await op.setViewport({ width: 1440, height: 1000 });
+
+// V0c: Operator login overlay — console elements NOT accessible behind overlay
+await test('CORE: Operator overlay blocks console (visual isolation)', async () => {
+  await op.goto(BASE + OPS_PATH, { waitUntil: 'networkidle0', timeout: 10000 });
+  const overlayVisible = await op.$eval('#loginOverlay', el => {
+    const s = window.getComputedStyle(el);
+    return s.display !== 'none' && el.offsetHeight > 0;
+  });
+  if (!overlayVisible) throw new Error('Login overlay not visible — operator console exposed without authentication');
+  console.log('    [overlay visible, console protected]');
+});
 
 await test('Operator hidden path returns 404 for wrong paths', async () => {
   const res = await op.goto(BASE + '/admin', { waitUntil: 'networkidle0' });
