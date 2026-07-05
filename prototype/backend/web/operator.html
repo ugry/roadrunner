@@ -697,13 +697,25 @@ async function toggleStatus() {
 // ===== TIMERS: auto-refresh + SLA =====
 function startTimers() {
   stopTimers();
-  queueTimer = setInterval(function() { loadQueue(); loadStats(); }, 8000);
+  // SSE replaces polling for queue updates
+  if (window.EventSource) {
+    var es = new EventSource('/api/events');
+    es.addEventListener('case.created', function(e) { loadQueue(); loadStats(); });
+    es.addEventListener('case.dispatched', function(e) { loadQueue(); loadStats(); });
+    es.addEventListener('case.updated', function(e) { loadQueue(); });
+    es.addEventListener('mission.eta', function(e) { loadQueue(); });
+    es.addEventListener('queue.refresh', function(e) { loadQueue(); loadStats(); });
+    es.addEventListener('connected', function(e) { console.log('SSE connected'); });
+    es.onerror = function() { es.close(); queueTimer = setInterval(function() { loadQueue(); loadStats(); }, 8000); };
+    window._sse = es;
+  }
   slaTimer = setInterval(updateSlaTimers, 2000);
 }
 
 function stopTimers() {
   if (queueTimer) clearInterval(queueTimer);
   if (slaTimer) clearInterval(slaTimer);
+  if (window._sse) { window._sse.close(); window._sse = null; }
   queueTimer = null;
   slaTimer = null;
 }

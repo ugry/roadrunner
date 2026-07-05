@@ -297,6 +297,14 @@ func dispatchWithFallback(ctx context.Context, caseID, service string, forceProv
 		db.Exec(ctx, `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'dispatch',$2)`,
 			caseID, fmt.Sprintf("dispatched %s (via %s) ETA %d min", p.Name, "api", eta))
 
+		// SSE: notify operators of the dispatch
+		publishSSE("case.dispatched", map[string]any{
+			"case_id":  caseID,
+			"provider": p.Name,
+			"eta":      eta,
+			"status":   "dispatched",
+		})
+
 		// SMS notification
 		link := statusBase + "/" + fmt.Sprintf("%d", time.Now().UnixNano())
 		smsStatus := sendSMS(ctx, caseID, p.Name, "en route", "pending", eta, link)

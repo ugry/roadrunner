@@ -81,6 +81,7 @@ func main() {
 	mux.HandleFunc("/api/telephony/mock/psap", handleMockPsap)
 	mux.HandleFunc("/api/telephony/mock/call-state", handleMockCallState)
 	mux.HandleFunc("/api/webhook/provider", handleProviderWebhook)
+	mux.HandleFunc("/api/events", handleSSE)
 
 	// user (customer) — requires user session
 	mux.HandleFunc("/api/user/incident", requireRole("user", handleUserIncident))
@@ -341,6 +342,7 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'note',$2)`, cid, note)
 	publishEvent(r.Context(), "case.created", map[string]any{"case_id": cid, "case_number": caseNo, "incident": nz(in.Incident, "breakdown"), "customer_id": uid})
+	publishSSE("case.created", map[string]any{"case_id": cid, "case_number": caseNo, "incident": nz(in.Incident, "breakdown")})
 	writeJSON(w, 201, map[string]string{"case_id": cid, "case_number": caseNo, "status": "triaging"})
 }
 
