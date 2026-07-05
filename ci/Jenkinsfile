@@ -48,7 +48,6 @@ spec:
   stages {
     stage('Checkout') {
       steps {
-        deleteDir()
         checkout scm
         script {
           sh 'git fetch --force --tags origin'
