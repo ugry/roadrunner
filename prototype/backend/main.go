@@ -134,30 +134,38 @@ func logMW(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
+// custom404 returns JSON for API routes, HTML for web routes (#43 / E7).
+func custom404(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(404)
+		json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(404)
+	w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>404 — Insucar</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#f4f8f6;color:#0b1f2a}div{text-align:center}h1{font-size:3rem;color:#0a7d5a}a{color:#0a7d5a}</style></head><body><div><h1>404</h1><p>Page not found</p><a href="/">Home</a> · <a href="/app">Sign in</a> · <a href="tel:+33800000000">Call us</a></div></body></html>`))
+}
+
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
-	if i := strings.IndexByte(host, ':'); i >= 0 {
-		host = host[:i]
-	}
-	// Operators-only surface on op.*
+	if i := strings.IndexByte(host, ':'); i >= 0 { host = host[:i] }
 	if strings.HasPrefix(host, "op.") {
-		if r.URL.Path == "/callback" {
-			http.ServeFile(w, r, "/app/web/cognito-callback.html")
-			return
-		}
+		if r.URL.Path == "/callback" { http.ServeFile(w, r, "/app/web/cognito-callback.html"); return }
+		if strings.HasPrefix(r.URL.Path, "/api/") { return } // let mux handle API
 		http.ServeFile(w, r, "/app/web/operator.html")
 		return
 	}
-	// Users-only surface on the apex / other hosts
 	switch r.URL.Path {
 	case "/":
-		http.ServeFile(w, r, "/app/web/landing.html") // marketing landing
+		http.ServeFile(w, r, "/app/web/landing.html")
 	case "/app", "/login", "/register":
-		http.ServeFile(w, r, "/app/web/enduser.html") // functional user app
+		http.ServeFile(w, r, "/app/web/enduser.html")
 	case "/app/callback":
 		http.ServeFile(w, r, "/app/web/cognito-callback.html")
 	default:
-		http.NotFound(w, r)
+		if strings.HasPrefix(r.URL.Path, "/api/") { return } // let mux handle
+		custom404(w, r)
 	}
 }
 
@@ -312,11 +320,44 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
 	}
+	// E1 + E8: Server-side validation
+	first := strings.TrimSpace(in.First)
+	last := strings.TrimSpace(in.Last)
+	email := strings.TrimSpace(in.Email)
+	phone := strings.TrimSpace(in.Phone)
+	password := in.Password
+
+	var errs []string
+	if first == "" { errs = append(errs, "first name required") }
+	if last == "" { errs = append(errs, "last name required") }
+	if len(first) > 100 { errs = append(errs, "first name too long (max 100)") }
+	if email == "" || !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+		errs = append(errs, "valid email required")
+	}
+	if phone == "" || !strings.HasPrefix(phone, "+") {
+		errs = append(errs, "phone required (E.164 format, e.g. +33600000009)")
+	}
+	if len(password) < 8 {
+		errs = append(errs, "password must be at least 8 characters")
+	}
+	// E2: GDPR consent enforcement
+	hasTerms := false
+	for _, c := range in.Consents {
+		if c == "terms" { hasTerms = true; break }
+	}
+	if !hasTerms {
+		errs = append(errs, "consent to terms of service required (GDPR Art.7)")
+	}
+	if len(errs) > 0 {
+		writeJSON(w, 400, map[string]any{"error": "validation failed", "fields": errs})
+		return
+	}
+
 	var id string
 	err := db.QueryRow(r.Context(),
 		`INSERT INTO customers(email,phone_e164,first_name,last_name,preferred_language,country_code,status,password_hash)
 		 VALUES($1,$2,$3,$4,$5,$6,'active',$7) RETURNING id`,
-		in.Email, in.Phone, in.First, in.Last, nz(in.Language, "en"), nz(in.Country, "FR"), sha256hex(in.Password)).Scan(&id)
+		email, phone, first, last, nz(in.Language, "en"), nz(in.Country, "FR"), sha256hex(password)).Scan(&id)
 	if err != nil {
 		writeJSON(w, 409, map[string]string{"error": err.Error()})
 		return
@@ -338,15 +379,24 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 		uid = c.ID
 	}
 	var in struct{ Incident, Description, Address, Lat, Lng, PhotoID string }
-	json.NewDecoder(r.Body).Decode(&in)
+	if json.NewDecoder(r.Body).Decode(&in) != nil {
+		writeJSON(w, 400, map[string]string{"error": "bad json"})
+		return
+	}
+	// E3: Validate required fields
+	desc := strings.TrimSpace(in.Description)
+	if desc == "" {
+		writeJSON(w, 400, map[string]string{"error": "description required"})
+		return
+	}
 	caseNo := fmt.Sprintf("CASE-%d", time.Now().Unix())
 	var cid string
 	err := db.QueryRow(r.Context(),
 		`INSERT INTO cases(case_number,customer_id,channel,status,priority,incident,incident_at,symptom_description)
 		 VALUES($1,$2,'app','triaging','high',$3,now(),$4) RETURNING id`,
-		caseNo, uid, nz(in.Incident, "breakdown"), in.Description).Scan(&cid)
+		caseNo, uid, nz(in.Incident, "breakdown"), desc).Scan(&cid)
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		writeJSON(w, 400, map[string]string{"error": "failed to create case: " + err.Error()})
 		return
 	}
 	if in.Address != "" || in.Lat != "" {
