@@ -195,6 +195,20 @@ function panicMode() {
   wizPanic = true;
 }
 var wizPanic = false;
+// Battery-saving mode
+function checkBattery() {
+  if ('getBattery' in navigator) {
+    navigator.getBattery().then(function(b) {
+      if (b.level < 0.2 && !b.charging) {
+        document.body.style.filter = 'brightness(0.85)';
+        document.body.style.transition = 'filter 1s';
+        clearInterval(queueTimer); queueTimer = setInterval(function() { loadQueue(); loadStats(); }, 30000);
+        el('out').textContent = '🔋 Low battery — power save mode active';
+      }
+    });
+  }
+}
+setTimeout(checkBattery, 3000);
 
 async function submitIncident() {
   // If photo attached, upload it first
@@ -329,5 +343,17 @@ function showPhrases(lang) {
   el('phraseCards').innerHTML = h;
 }
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
+// Apply saved language
+var savedLang = localStorage.getItem('insucar_lang') || 'en';
+if (savedLang !== 'en') {
+  var i18nEU = { fr: { 'Welcome back':'Bon retour', 'Sign in to request':'Connectez-vous pour demander', 'Log in':'Connexion', 'Register':'Inscription', 'Create your account':'Créez votre compte', 'Request assistance':'Demander assistance', 'My cases':'Mes dossiers', 'Car won\'t start':'Voiture ne démarre pas', 'Accident':'Accident', 'Flat tyre':'Pneu crevé', 'Describe it':'Décrivez', 'Where are you?':'Où êtes-vous?', 'Next →':'Suivant →', '← Back':'← Retour', 'Press & hold':'Maintenez pour aider' },
+    de: { 'Welcome back':'Willkommen zurück', 'Log in':'Anmelden', 'Register':'Registrieren', 'Request assistance':'Hilfe anfordern', 'My cases':'Meine Fälle', 'Next →':'Weiter →', '← Back':'← Zurück' },
+    es: { 'Welcome back':'Bienvenido de nuevo', 'Log in':'Iniciar sesión', 'Register':'Registrarse', 'Request assistance':'Solicitar ayuda', 'My cases':'Mis casos', 'Next →':'Siguiente →', '← Back':'← Volver' } };
+  var dict = i18nEU[savedLang] || {};
+  document.querySelectorAll('h1,label,b,button,.tabx').forEach(function(el) {
+    var t = el.textContent.trim();
+    if (dict[t]) el.textContent = dict[t];
+  });
+}
 </script>
 </body></html>
