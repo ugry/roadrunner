@@ -56,6 +56,7 @@ func main() {
 	}
 	initRedis()
 	initTenants(context.Background())
+	initPinpoint()
 	cognito = newCognitoVerifier()
 	if cognito != nil {
 		if err := cognito.refresh(context.Background()); err != nil {
@@ -82,6 +83,10 @@ func main() {
 	mux.HandleFunc("/api/telephony/mock/call-state", handleMockCallState)
 	mux.HandleFunc("/api/webhook/provider", handleProviderWebhook)
 	mux.HandleFunc("/api/events", handleSSE)
+	mux.HandleFunc("/api/connect/events", handleConnectEvent)
+	mux.HandleFunc("/api/connect/lex", handleLexTriage)
+	mux.HandleFunc("/api/connect/psap", handlePsapTransfer)
+	mux.HandleFunc("/api/pinpoint/callback", handlePinpointCallback)
 
 	// user (customer) — requires user session
 	mux.HandleFunc("/api/user/incident", requireRole("user", handleUserIncident))

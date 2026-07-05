@@ -402,7 +402,7 @@
     },
     {
       "failPipeline": true,
-      "instructions": "Approve promotion to PROD. Restricted to the 'insucar-product-owners' role (no self-approval by the requester).",
+      "instructions": "Approve promotion to PROD. Restricted to the 'insucar-product-owners' role (no self-approval by the requester). Canary analysis results are attached below for review.",
       "judgmentInputs": [],
       "selectedStageRoles": [
         "insucar-product-owners"
@@ -410,7 +410,8 @@
       "name": "Promote to PROD? (product owner)",
       "refId": "4",
       "requisiteStageRefIds": [
-        "7"
+        "7",
+        "canary"
       ],
       "type": "manualJudgment"
     },
@@ -666,8 +667,59 @@
           }
         }
       ]
+    },
+    {
+      "name": "Canary analysis",
+      "type": "canary",
+      "refId": "canary",
+      "requisiteStageRefIds": [
+        "7"
+      ],
+      "canaryConfig": {
+        "lifetimeDuration": "PT10M",
+        "analysisInterval": "PT2M",
+        "trafficPercentage": 5,
+        "judge": "NetflixACAJudge-v1.0",
+        "canaryHealthCheckHandler": {
+          "minimumCanaryResultScore": 75
+        },
+        "canarySuccessCriteria": {
+          "canaryResultScore": 75
+        },
+        "metrics": [
+          {
+            "name": "error_rate",
+            "query": {
+              "type": "prometheus",
+              "metricName": "http_requests_total",
+              "labelBindings": ["status=~'5..'"]
+            },
+            "analysisConfigurations": {
+              "canary": {
+                "direction": "increase",
+                "allowedIncrease": 2.0
+              }
+            }
+          },
+          {
+            "name": "latency_p99",
+            "query": {
+              "type": "prometheus",
+              "metricName": "http_request_duration_seconds",
+              "labelBindings": ["quantile='0.99'"]
+            },
+            "analysisConfigurations": {
+              "canary": {
+                "direction": "increase",
+                "allowedIncrease": 500
+              }
+            }
+          }
+        ]
+      },
+      "comments": "Kayenta canary: deploys 5% traffic for 10 min, auto-rollback if error rate > 2x baseline or p99 latency > 500ms increase"
     }
   ],
   "triggers": [],
-  "updateTs": "1783106054000"
+  "updateTs": "1783236300000"
 }
