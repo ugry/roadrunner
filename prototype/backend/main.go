@@ -98,6 +98,7 @@ func main() {
 	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
 	mux.HandleFunc("/api/case/arrived", requireRole("user", handleCaseArrived))
 	mux.HandleFunc("/api/agent/predict-eta", requireRole("agent", handlePredictEta))
+	mux.HandleFunc("/api/agent/safety-triage", requireRole("agent", handleSafetyTriage))
 
 	// auth config (Cognito setup exposed to frontends)
 	mux.HandleFunc("/api/auth/config", handleAuthConfig)
@@ -569,6 +570,28 @@ func handleMockIncoming(w http.ResponseWriter, r *http.Request) {
 		pop["screen_pop"] = m
 	}
 	writeJSON(w, 200, pop)
+}
+
+// Wire safety triage to database + auto-escalate priority (#31)
+func handleSafetyTriage(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		CaseID          string `json:"case_id"`
+		EveryoneSafe    bool   `json:"everyone_safe"`
+		InLiveTraffic   bool   `json:"in_live_traffic"`
+		OnHardShoulder  bool   `json:"on_hard_shoulder"`
+		Vulnerable      bool   `json:"vulnerable_occupants"`
+		IsDark          bool   `json:"is_dark"`
+	}
+	json.NewDecoder(r.Body).Decode(&in)
+	db.Exec(r.Context(), `INSERT INTO case_safety(case_id,is_everyone_safe,in_live_traffic,on_hard_shoulder,vulnerable_occupants,is_dark)
+		VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(case_id) DO UPDATE SET is_everyone_safe=$2,in_live_traffic=$3,on_hard_shoulder=$4,vulnerable_occupants=$5,is_dark=$6`,
+		in.CaseID, in.EveryoneSafe, in.InLiveTraffic, in.OnHardShoulder, in.Vulnerable, in.IsDark)
+	// Auto-escalate: any safety concern → priority=emergency
+	if !in.EveryoneSafe || in.InLiveTraffic || in.Vulnerable {
+		db.Exec(r.Context(), `UPDATE cases SET priority='emergency' WHERE id=$1`, in.CaseID)
+		publishSSE("case.updated", map[string]any{"case_id": in.CaseID, "priority": "emergency"})
+	}
+	writeJSON(w, 200, map[string]any{"case_id": in.CaseID, "priority_escalated": !in.EveryoneSafe || in.InLiveTraffic || in.Vulnerable})
 }
 
 // handleMockPsap performs a simulated PSAP (112) warm-transfer with audit trail.

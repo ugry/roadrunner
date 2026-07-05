@@ -72,6 +72,7 @@
         <label>Email</label><input id="l_email" value="claire.martin@example.fr">
         <label>Password</label><input id="l_pass" type="password" value="Claire#2026">
         <button class="btn btn-primary" onclick="login()">Log in</button>
+        <div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><span class="muted" style="font-size:12px">Stranded? Can't log in?</span><br><a href="tel:+33800000000" style="color:var(--brand);font-weight:700;font-size:14px;text-decoration:none">📞 Call +33 800 000 000</a><br><span class="muted" style="font-size:11px">24/7 emergency line — no login needed</span></div>
         <div id="cognitoLogin" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><button class="btn btn-ghost" onclick="pkceLogin()" style="margin-top:0">Sign in with Cognito</button><div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center">Managed SSO login</div></div>
       </div>
       <div id="reg" class="hidden">
@@ -194,6 +195,27 @@ function panicMode() {
   el('wizSummary').style.color = '#e74c3c';
   wizPanic = true;
 }
+// Inline banner (#28) — replaces browser alert()
+function showBanner(msg, type) {
+  var b = document.createElement('div');
+  b.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 24px;border-radius:12px;font-weight:700;z-index:9999;animation:fadeIn .3s ease;max-width:90vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.15)';
+  b.style.background = type === 'error' ? '#ffeaea' : '#e6f4ee';
+  b.style.color = type === 'error' ? '#c0392b' : 'var(--brand)';
+  b.style.border = '1px solid ' + (type === 'error' ? '#e74c3c' : 'var(--brand)');
+  b.textContent = msg; document.body.appendChild(b);
+  setTimeout(function() { b.style.opacity = '0'; b.style.transition = 'opacity .5s'; setTimeout(function() { b.remove(); }, 500); }, 3000);
+}
+// Auto-detect GPS (#27)
+function autoGPS() {
+  if (!navigator.geolocation) return;
+  if (sessionStorage.getItem('gps_lat')) { el('i_addr').placeholder = '📍 GPS ready'; return; }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    sessionStorage.setItem('gps_lat', pos.coords.latitude.toFixed(5));
+    sessionStorage.setItem('gps_lng', pos.coords.longitude.toFixed(5));
+    el('i_addr').placeholder = '📍 GPS ready';
+  }, function() {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 300000 });
+}
+setTimeout(autoGPS, 1000);
 var wizPanic = false;
 // Battery-saving mode
 function checkBattery() {
@@ -228,8 +250,8 @@ async function submitIncident() {
                lat: sessionStorage.getItem('gps_lat') || '', lng: sessionStorage.getItem('gps_lng') || '',
                photo_id: photoId };
   var r = await api('/api/user/incident', { method: 'POST', body: JSON.stringify(body) });
-  if (r.ok) { alert('Case created: ' + r.body.case_number + ' — a coordinator will assist you.'); loadCases(); }
-  else alert('Error: ' + (r.body.error || r.status));
+  if (r.ok) { showBanner('✅ Case '+r.body.case_number+' — tracking live below','success'); loadCases(); el('i_type').value='breakdown';el('i_desc').value='';el('i_addr').value='';nextWiz(1); setTimeout(function(){el('cases').scrollIntoView({behavior:'smooth'});},500); }
+  else showBanner('⚠ '+(r.body.error||'Request failed'),'error');
 }
 function getGPSLocation() {
   el('i_addr').placeholder = 'Getting location…';

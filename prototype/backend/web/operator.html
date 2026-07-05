@@ -494,11 +494,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
         <div class="panel triage" id="triagePanel" style="display:none">
           <div class="panel-head"><div class="panel-title">⚠ Safety Triage</div><span class="tag" style="color:var(--warn)">critical</span></div>
           <div class="panel-body" id="triageBody">
-            <div class="triage-q"><label>Everyone safe?</label><div class="seg"><button class="yes on">YES</button><button class="no" onclick="this.parentElement.querySelector('.yes').classList.remove('on');this.classList.add('on');">NO</button></div></div>
-            <div class="triage-q"><label>In live traffic?</label><div class="seg"><button class="unsafe on">YES</button><button class="no" onclick="this.parentElement.querySelector('.unsafe').classList.remove('on');this.classList.add('on');">NO</button></div></div>
-            <div class="triage-q"><label>On hard shoulder?</label><div class="seg"><button class="safe on">YES</button><button class="no" onclick="this.parentElement.querySelector('.safe').classList.remove('on');this.classList.add('on');">NO</button></div></div>
-            <div class="triage-q"><label>Vulnerable occupants?</label><div class="seg"><button class="yes on">YES</button><button class="no" onclick="this.parentElement.querySelector('.yes').classList.remove('on');this.classList.add('on');">NO</button></div></div>
-            <div class="triage-q"><label>Night/darkness?</label><div class="seg"><button class="unsafe on">YES</button><button class="no" onclick="this.parentElement.querySelector('.unsafe').classList.remove('on');this.classList.add('on');">NO</button></div></div>
+            <div class="triage-q"><label>Everyone safe?</label><div class="seg"><button class="yes on" onclick="submitTriage()">YES</button><button class="no" onclick="this.parentElement.querySelector('.yes').classList.remove('on');this.classList.add('on');submitTriage()">NO</button></div></div>
+            <div class="triage-q"><label>In live traffic?</label><div class="seg"><button class="unsafe on" onclick="submitTriage()">YES</button><button class="no" onclick="this.parentElement.querySelector('.unsafe').classList.remove('on');this.classList.add('on');submitTriage()">NO</button></div></div>
+            <div class="triage-q"><label>On hard shoulder?</label><div class="seg"><button class="safe on" onclick="submitTriage()">YES</button><button class="no" onclick="this.parentElement.querySelector('.safe').classList.remove('on');this.classList.add('on');submitTriage()">NO</button></div></div>
+            <div class="triage-q"><label>Vulnerable occupants?</label><div class="seg"><button class="yes on" onclick="submitTriage()">YES</button><button class="no" onclick="this.parentElement.querySelector('.yes').classList.remove('on');this.classList.add('on');submitTriage()">NO</button></div></div>
+            <div class="triage-q"><label>Night/darkness?</label><div class="seg"><button class="unsafe on" onclick="submitTriage()">YES</button><button class="no" onclick="this.parentElement.querySelector('.unsafe').classList.remove('on');this.classList.add('on');submitTriage()">NO</button></div></div>
           </div>
         </div>
       </div>
@@ -1082,6 +1082,23 @@ async function quickAction(action) {
     var r = await api('/api/agent/sms-journey', { method: 'POST', body: JSON.stringify({ caseID: selCase, step: step }) });
     if (r.ok) { el('popline').innerHTML = '✅ SMS sent: ' + step; loadQueue(); }
   }
+  if (action === 'call_customer') el('popline').innerHTML = '📞 Calling customer (mock)';
+}
+
+async function submitTriage() {
+  if (!selCase) return;
+  var qs = el('triageBody').querySelectorAll('.triage-q');
+  var safe = qs[0].querySelector('.yes.on') !== null;
+  var traffic = qs[1].querySelector('.unsafe.on') !== null;
+  var shoulder = qs[2].querySelector('.safe.on') !== null;
+  var vuln = qs[3].querySelector('.yes.on') !== null;
+  var dark = qs[4].querySelector('.unsafe.on') !== null;
+  var r = await api('/api/agent/safety-triage', { method: 'POST', body: JSON.stringify({
+    case_id: selCase, everyone_safe: safe, in_live_traffic: traffic,
+    on_hard_shoulder: shoulder, vulnerable_occupants: vuln, is_dark: dark
+  })});
+  if (r.ok && r.body.priority_escalated) loadQueue();
+}
   if (action === 'call_customer') {
     el('popline').innerHTML = '📞 Initiating call to customer (mock)';
   }
