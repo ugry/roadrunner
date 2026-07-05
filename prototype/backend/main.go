@@ -329,7 +329,6 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	phone := strings.TrimSpace(in.Phone)
 	password := in.Password
 	country := strings.TrimSpace(in.Country)
-	lang := strings.TrimSpace(in.Language)
 
 	var errs []string
 	if first == "" { errs = append(errs, "first name required") }
