@@ -396,7 +396,72 @@ func handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		region = "eu-west-1"
 	}
 	if domain == "" || clientID == "" {
-		writeJSON(w, 400, map[string]string{"error": "password reset not configured"})
+		// Cognito not configured — use demo self-service reset.
+		// Accept GET with ?email= param to show form, POST to execute reset.
+		if r.Method == http.MethodPost {
+			email := strings.TrimSpace(r.FormValue("email"))
+			newPass := r.FormValue("password")
+			if email == "" || !strings.Contains(email, "@") || newPass == "" || len(newPass) < 8 {
+				writeJSON(w, 400, map[string]string{"error": "valid email and password (min 8 chars) required"})
+				return
+			}
+			hash, err := hashPasswordBcrypt(newPass)
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "reset failed — please try again"})
+				return
+			}
+			tag, tagErr := db.Exec(r.Context(),
+				`UPDATE customers SET password_hash=$1 WHERE email=$2`, hash, email)
+			if tagErr != nil || tag.RowsAffected() == 0 {
+				slog.Error("password_reset_demo", "err", tagErr, "email", email)
+				writeJSON(w, 404, map[string]string{"error": "no account found with that email. Create a new account instead."})
+				return
+			}
+			slog.Info("password_reset_demo", "email", email)
+			writeJSON(w, 200, map[string]string{"status": "password reset — you can now log in"})
+			return
+		}
+		// GET: show a simple inline password reset form.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(200)
+		io.WriteString(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reset Password — Insucar</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--brand:#0a7d5a;--brand-d:#086a4d;--navy:#0b1f2a;--bg:#f4f8f6;--surface:#fff;--line:#e3ece8;--muted:#5b7183;--fg:#0b1f2a;--radius:14px;--font:Inter,system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;font-family:var(--font);color:var(--fg);background:radial-gradient(700px 400px at 80% -10%,rgba(10,125,90,.10),transparent 60%),var(--bg);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 20px 60px rgba(11,31,42,.08);max-width:440px;width:100%;margin:20px}
+.card-h{padding:18px 24px;border-bottom:1px solid var(--line);font-size:20px;font-weight:800}
+.card-b{padding:24px}label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fbfdfc}
+input:focus{outline:2px solid var(--brand);outline-offset:2px;border-color:var(--brand)}
+.btn{border:0;border-radius:10px;padding:12px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-top:14px}
+.btn-primary{background:var(--brand);color:#fff}.btn-primary:hover{background:var(--brand-d)}
+#msg{margin-top:10px;font-size:13px;text-align:center}
+</style></head><body>
+<div class="card"><div class="card-h">🔑 Reset Your Password</div><div class="card-b">
+<p style="color:var(--muted);font-size:14px;margin:0 0 16px">Enter the email you registered with and choose a new password.</p>
+<label>Email</label><input type="email" id="email" placeholder="you@example.com">
+<label>New password (min 8 chars)</label><input type="password" id="pass" placeholder="New password">
+<button class="btn btn-primary" onclick="doReset()">Reset Password</button>
+<div id="msg"></div>
+<div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);font-size:13px">
+<a href="/app" style="color:var(--brand);text-decoration:none">← Back to login</a>
+</div>
+</div></div>
+<script>
+async function doReset(){
+ var e=document.getElementById("email").value.trim(),p=document.getElementById("pass").value;
+ var m=document.getElementById("msg");
+ if(!e||e.indexOf("@")<0){m.innerHTML='<span style="color:#c0392b">Valid email required</span>';return}
+ if(!p||p.length<8){m.innerHTML='<span style="color:#c0392b">Password must be at least 8 characters</span>';return}
+ m.innerHTML='<span style="color:var(--muted)">Resetting…</span>';
+ var r=await fetch("/api/forgot-password",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"email="+encodeURIComponent(e)+"&password="+encodeURIComponent(p)});
+ var b=await r.json();
+ if(r.ok){m.innerHTML='<span style="color:var(--brand)">✅ Password reset! <a href="/app">Log in now →</a></span>'}
+ else{m.innerHTML='<span style="color:#c0392b">'+b.error+'</span>'}
+}
+</script></body></html>`)
 		return
 	}
 	state := fmt.Sprintf("%x", sha256.Sum256([]byte(time.Now().String())))[:16]

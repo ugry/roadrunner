@@ -1,0 +1,23 @@
+# DEV environment ConfigMap — isolated from UAT and PROD
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: insucar-config
+  namespace: insucar-dev
+data:
+  AWS_REGION: "eu-west-1"
+  EVENT_BUS_NAME: "insucar-dev"
+  DISPATCH_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/326804802908/insucar-dev-dispatch"
+  NOTIFICATION_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/326804802908/insucar-dev-notification"
+  # DEV Cognito — currently empty (no separate DEV pools yet; Cognito login disabled on DEV)
+  COGNITO_ISSUER: ""
+  COGNITO_CLIENT_IDS: ""
+  COGNITO_STAFF_ISSUER: ""
+  COGNITO_STAFF_CLIENT_IDS: ""
+  COGNITO_CUSTOMER_DOMAIN: ""
+  COGNITO_CUSTOMER_CLIENT_ID: ""
+  COGNITO_STAFF_DOMAIN: ""
+  COGNITO_STAFF_CLIENT_ID: ""
+  PROVIDER_API_URL: "http://provider-axa.insucar-dev.svc.cluster.local:5678"
+  STATUS_LINK_BASE: "https://dev.unysolar.com/status"
+  SESSION_SECRET: ""  # Set via Secret insucar-app
