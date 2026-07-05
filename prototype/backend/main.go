@@ -1995,7 +1995,8 @@ func csrfMW(next http.Handler) http.Handler {
 		// Skip for login, register, and CORS-related endpoints (no session yet)
 		if strings.HasPrefix(path, "/api/") &&
 			(strings.HasSuffix(path, "/login") || strings.HasSuffix(path, "/register") ||
-				path == "/api/register" || path == "/api/auth/config") {
+				path == "/api/register" || path == "/api/auth/config" ||
+				path == "/api/forgot-password") {
 			next.ServeHTTP(w, r)
 			return
 		}
