@@ -45,12 +45,12 @@ Last updated: 2026-07-05 (rich operator console deployed)
   * https://unysolar.com/  (+www) -> premium marketing landing (OD "stripe", golden-ratio); logo shield.
   * https://unysolar.com/app       -> functional user app: login/register -> request assistance -> my cases.
   * https://op.unysolar.com/        -> operator console: agent login -> live queue -> screen-pop -> dispatch.
-- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:13 (Jenkins build 13, multi-tenant + rich console).
+- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:15 (Jenkins build 15, connector webhooks + telephony PSAP).
 - Auth (demo): users by EMAIL, agents by AGENT_ID (HMAC cookie sessions). Creds in access.md.
   Users: claire.martin@example.fr / Claire#2026 (+john,+lukas). Agents: OP-1001/Operator#2026 (+SUP-2001,PO-3001).
-- Backend: Go service prototype/backend/ (main.go + tenant.go + events.go + cache.go + cognito.go).
-   Endpoints /api/user/*, /api/agent/* (added /providers, /stats, /status), /api/register, /api/telephony/mock/incoming.
-   Host-based routing (op.* vs apex) in handleRoot.
+- Backend: Go service prototype/backend/ (main.go + connector.go + tenant.go + cognito.go + events.go + cache.go).
+   Endpoints: /api/user/*, /api/agent/* (added /providers, /stats, /status), /api/webhook/provider,
+   /api/telephony/mock/{incoming,psap,call-state}, /api/register. Host-based routing.
 - Mock Amazon Connect; REAL provider connector (provider-axa svc); REAL SMS via SNS.
 - TLS: ingress-nginx + cert-manager (ClusterIssuer letsencrypt-prod, cert insucar-tls). 80->443 redirect.
   insucar-api svc = ClusterIP; Route53 alias (unysolar/www/app/op) -> ingress ELB.
@@ -113,8 +113,8 @@ export PATH="$HOME/.local/bin:$PATH"
    ⚠️ KNOWN LIMITATION: SET LOCAL doesn't carry across pgxpool connections. RLS policies exist but don't
    engage yet. Fix: refactor to acquire dedicated connection per request, or use BEGIN/SET/COMMIT wrapper.
    See prototype/backend/tenant.go. Default tenant auto-seeded at startup.
-4. Real telephony: swap mock Connect for live Amazon Connect + Lex; Pinpoint SMS out of sandbox.
-5. Real provider connectors (AXA Roadside Missioning / Towpal) via the connector registry + webhooks.
+4. ✅ DONE — Real telephony foundation: PSAP warm-transfer with audit trail, call state lifecycle (ringing→connected→wrapup). Mock Connect remains; real Connect/Lex requires AWS infra.
+5. ✅ DONE (infrastructure) — Provider connectors: webhook receiver with HMAC verification, multi-provider fallback chain with circuit breaker, provider health checker (60s loop). Real AXA/Towpal integration awaits sandbox access.
 6. HA data: Amazon RDS Multi-AZ (managed failover); move to separate AWS accounts per tier.
 7. Expand Spinnaker pipeline stages (bake->canary/Kayenta->prod); run git-push->deploy end-to-end.
 8. Harden: rotate the ROOT AWS keys + GitHub PAT; SSO+TLS in front of Jenkins/Spinnaker; restrict LBs.
