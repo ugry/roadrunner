@@ -108,20 +108,15 @@ All 7 end-to-end tests pass:
 6. ✅ `/api/me` after re-login → `authenticated: true`
 7. ✅ Secure flag present on all Set-Cookie headers
 
-### Deployment Topology (important)
+### Deployment Topology (updated 2026-07-05 19:10 UTC — Ingress moved to insucar-prod)
+
 | Namespace | Image | Traffic | Managed By |
 |-----------|-------|---------|------------|
-| `insucar` | `:41` | **Live** (ingress → unysolar.com) | Manual kubectl |
-| `insucar-dev` | varies | Staging | Spinnaker pipeline |
-| `insucar-uat` | varies | UAT | Spinnaker pipeline |
-| `insucar-prod` | `:41` | None (no ingress) | Spinnaker pipeline |
+| `insucar-prod` | `:42` | **Live** (ingress → unysolar.com) | Spinnaker pipeline |
+| `insucar` | `:42` (scaled to 0) | None (retired) | — |
+| `insucar-dev` | varies | DEV staging | Spinnaker pipeline |
+| `insucar-uat` | varies | UAT staging | Spinnaker pipeline |
 
-**⚠ Watch out:** Spinnaker deploys to `insucar-prod` but live traffic flows through
-`insucar` namespace. After CI/CD builds, the `insucar` namespace must be manually
-updated or the ingress should point to `insucar-prod`.
-
-### Related GitHub Issues
-- #62: COGNITO_ISSUER pool mismatch (created)
-- #63: bearerApi cookie fallback unreliable (created)
-- #64: Session cookie missing Secure flag (created)
-- #65: Deployment manifests not used by Spinnaker pipeline (created)
+**✅ Gap resolved (2026-07-05):** The Ingress was moved from the `insucar` namespace
+to `insucar-prod`. After each Spinnaker CI/CD build, the `insucar-prod` deployment
+is automatically updated and immediately serves live traffic. No more manual `kubectl set image`.
