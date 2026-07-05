@@ -401,11 +401,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
       <div class="vr"></div>
       <div class="clock"><span class="t mono" id="clock">--:--:--</span><span class="z">CET · Ops Floor A</span></div>
       <div class="sla-strip">
-        <div class="sla"><div class="k">Waiting</div><div class="v tnum" id="q-wait">0</div></div>
-        <div class="sla crit"><div class="k">Longest wait</div><div class="v tnum" id="q-longest">--:--</div></div>
-        <div class="sla ok"><div class="k">Avg → dispatch</div><div class="v tnum" id="q-avg">--:--</div></div>
-        <div class="sla"><div class="k">Active</div><div class="v tnum" id="q-active">0</div></div>
-        <div class="sla"><div class="k">Resolved</div><div class="v tnum" id="q-resolved">0</div></div>
+        <div class="sla"><div class="k" data-i18n="waiting">Waiting</div><div class="v tnum" id="q-wait">0</div></div>
+        <div class="sla crit"><div class="k" data-i18n="longest">Longest wait</div><div class="v tnum" id="q-longest">--:--</div></div>
+        <div class="sla ok"><div class="k" data-i18n="avg_disp">Avg → dispatch</div><div class="v tnum" id="q-avg">--:--</div></div>
+        <div class="sla"><div class="k" data-i18n="active">Active</div><div class="v tnum" id="q-active">0</div></div>
+        <div class="sla"><div class="k" data-i18n="resolved">Resolved</div><div class="v tnum" id="q-resolved">0</div></div>
       </div>
       <div class="vr"></div>
       <div class="agent">
@@ -414,6 +414,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
         <span class="status-pill oncall" id="statusPill" onclick="toggleStatus()"><span class="dot"></span><span id="statusLabel">On-call</span></span>
       </div>
       <button class="btn-112" onclick="psap()"><span class="siren"></span> 112 · PSAP Transfer</button>
+      <select id="langToggle" onchange="setLang(this.value)" style="background:var(--surface-warm);color:var(--fg-2);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;margin-left:4px">
+        <option value="en">EN</option><option value="fr">FR</option><option value="de">DE</option><option value="es">ES</option>
+      </select>
       <button class="ctl" style="width:auto;padding:8px 12px;margin-left:8px" onclick="alogout()">Log out</button>
     </header>
 
@@ -507,12 +510,18 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
           <div class="panel-head"><div class="panel-title">Required Service</div><span class="tag" id="svcTag">select</span></div>
           <div class="panel-body" style="padding:8px">
             <div class="svc-grid" id="svcGrid">
-              <button class="svc on" data-svc="tow_recovery"><span class="ico">🚚</span><div class="txt"><b>Tow/Recovery</b><small>Vehicle tow</small></div></button>
-              <button class="svc" data-svc="roadside_repair"><span class="ico">🔧</span><div class="txt"><b>Roadside Repair</b><small>On-site fix</small></div></button>
-              <button class="svc" data-svc="jump_start"><span class="ico">🔋</span><div class="txt"><b>Jump Start</b><small>Battery assist</small></div></button>
-              <button class="svc" data-svc="tyre_change"><span class="ico">🛞</span><div class="txt"><b>Tyre Change</b><small>Flat/spare</small></div></button>
-              <button class="svc" data-svc="lockout"><span class="ico">🔑</span><div class="txt"><b>Lockout</b><small>Door unlock</small></div></button>
-              <button class="svc" data-svc="fuel_delivery"><span class="ico">⛽</span><div class="txt"><b>Fuel Delivery</b><small>Out of fuel</small></div></button>
+              <button class="svc on" data-svc="tow_recovery"><span class="ico">🚚</span><div class="txt"><b data-i18n="svc_tow">Tow/Recovery</b><small data-i18n="svc_tow_desc">Vehicle tow</small></div></button>
+              <button class="svc" data-svc="roadside_repair"><span class="ico">🔧</span><div class="txt"><b data-i18n="svc_repair">Roadside Repair</b><small data-i18n="svc_repair_desc">On-site fix</small></div></button>
+              <button class="svc" data-svc="jump_start"><span class="ico">🔋</span><div class="txt"><b data-i18n="svc_jump">Jump Start</b><small data-i18n="svc_jump_desc">Battery assist</small></div></button>
+              <button class="svc" data-svc="tyre_change"><span class="ico">🛞</span><div class="txt"><b data-i18n="svc_tyre">Tyre Change</b><small data-i18n="svc_tyre_desc">Flat/spare</small></div></button>
+              <button class="svc" data-svc="lockout"><span class="ico">🔑</span><div class="txt"><b data-i18n="svc_lock">Lockout</b><small data-i18n="svc_lock_desc">Door unlock</small></div></button>
+              <button class="svc" data-svc="fuel_delivery"><span class="ico">⛽</span><div class="txt"><b data-i18n="svc_fuel">Fuel Delivery</b><small data-i18n="svc_fuel_desc">Out of fuel</small></div></button>
+              <button class="svc" data-svc="ev_charge"><span class="ico">⚡</span><div class="txt"><b data-i18n="svc_ev">EV Charge</b><small data-i18n="svc_ev_desc">Mobile charging</small></div></button>
+              <button class="svc" data-svc="winching"><span class="ico">🪢</span><div class="txt"><b data-i18n="svc_winch">Winching</b><small data-i18n="svc_winch_desc">Stuck vehicle</small></div></button>
+              <button class="svc" data-svc="vehicle_repatriation"><span class="ico">🚛</span><div class="txt"><b data-i18n="svc_repat">Repatriation</b><small data-i18n="svc_repat_desc">Cross-border</small></div></button>
+              <button class="svc" data-svc="journey_continuation"><span class="ico">🚗</span><div class="txt"><b data-i18n="svc_journey">Journey Continue</b><small data-i18n="svc_journey_desc">Alt transport</small></div></button>
+              <button class="svc" data-svc="car_swap_ev"><span class="ico">🔄</span><div class="txt"><b data-i18n="svc_swap">EV→ICE Swap</b><small data-i18n="svc_swap_desc">Petrol loan</small></div></button>
+              <button class="svc" data-svc="car_pickup_delivery"><span class="ico">🏠</span><div class="txt"><b data-i18n="svc_pickup">Pickup/Delivery</b><small data-i18n="svc_pickup_desc">Door-to-workshop</small></div></button>
             </div>
           </div>
         </div>
@@ -599,6 +608,11 @@ function updateProviderOnMap(provName, provLat, provLng) {
 }
 let providersData = [];
 let statsData = {};
+let currentLang = 'en';
+
+// i18n — EN/FR/DE/ES
+const i18n={en:{svc_tow:'Tow/Recovery',svc_tow_desc:'Vehicle tow',svc_repair:'Roadside Repair',svc_repair_desc:'On-site fix',svc_jump:'Jump Start',svc_jump_desc:'Battery assist',svc_tyre:'Tyre Change',svc_tyre_desc:'Flat/spare',svc_lock:'Lockout',svc_lock_desc:'Door unlock',svc_fuel:'Fuel Delivery',svc_fuel_desc:'Out of fuel',svc_ev:'EV Charge',svc_ev_desc:'Mobile charging',svc_winch:'Winching',svc_winch_desc:'Stuck vehicle',svc_repat:'Repatriation',svc_repat_desc:'Cross-border',svc_journey:'Journey Continue',svc_journey_desc:'Alt transport',svc_swap:'EV→ICE Swap',svc_swap_desc:'Petrol loan',svc_pickup:'Pickup/Delivery',svc_pickup_desc:'Door-to-workshop',waiting:'Waiting',longest:'Longest wait',avg_disp:'Avg→dispatch',active:'Active',resolved:'Resolved'},fr:{svc_tow:'Remorquage',svc_tow_desc:'Véhicule',svc_repair:'Dépannage',svc_repair_desc:'Sur place',svc_jump:'Batterie',svc_jump_desc:'Assistance',svc_tyre:'Pneu crevé',svc_tyre_desc:'Remplacement',svc_lock:'Serrurerie',svc_lock_desc:'Ouverture',svc_fuel:'Carburant',svc_fuel_desc:'Panne sèche',svc_ev:'VE recharge',svc_ev_desc:'Charge mobile',svc_winch:'Treillage',svc_winch_desc:'Bloqué',svc_repat:'Rapatriement',svc_repat_desc:'Transfrontalier',svc_journey:'Poursuite',svc_journey_desc:'Transport alt.',svc_swap:'VE→Thermique',svc_swap_desc:'Prêt',svc_pickup:'Collecte',svc_pickup_desc:'Porte-à-atelier',waiting:'En attente',longest:'Attente max',avg_disp:'Moy.→envoi',active:'Actifs',resolved:'Résolus'},de:{svc_tow:'Abschleppen',svc_tow_desc:'Fahrzeug',svc_repair:'Pannenhilfe',svc_repair_desc:'Vor Ort',svc_jump:'Starthilfe',svc_jump_desc:'Batterie',svc_tyre:'Reifenwechsel',svc_tyre_desc:'Platten',svc_lock:'Türöffnung',svc_lock_desc:'Schlüssel',svc_fuel:'Kraftstoff',svc_fuel_desc:'Tank leer',svc_ev:'E-Auto laden',svc_ev_desc:'Mobil',svc_winch:'Bergung',svc_winch_desc:'Festgefahren',svc_repat:'Rückführung',svc_repat_desc:'Grenzüberschr.',svc_journey:'Reiseforts.',svc_journey_desc:'Alt. Transport',svc_swap:'E→Verbrenner',svc_swap_desc:'Leihgabe',svc_pickup:'Abholung',svc_pickup_desc:'Tür-zu-Werkstatt',waiting:'Wartend',longest:'Längste Warte',avg_disp:'⌀→Versand',active:'Aktiv',resolved:'Erledigt'},es:{svc_tow:'Remolque',svc_tow_desc:'Vehículo',svc_repair:'Reparación',svc_repair_desc:'En sitio',svc_jump:'Batería',svc_jump_desc:'Asistencia',svc_tyre:'Neumático',svc_tyre_desc:'Pinchazo',svc_lock:'Cerrajería',svc_lock_desc:'Apertura',svc_fuel:'Combustible',svc_fuel_desc:'Sin gasolina',svc_ev:'Carga VE',svc_ev_desc:'Carga móvil',svc_winch:'Remolque',svc_winch_desc:'Atascado',svc_repat:'Repatriación',svc_repat_desc:'Transfronterizo',svc_journey:'Continuación',svc_journey_desc:'Transp. alt.',svc_swap:'VE→Gasolina',svc_swap_desc:'Préstamo',svc_pickup:'Recogida',svc_pickup_desc:'Puerta-a-taller',waiting:'Esperando',longest:'Espera máx.',avg_disp:'Prom.→envío',active:'Activos',resolved:'Resueltos'}};
+function setLang(lang){currentLang=lang||'en';localStorage.setItem('insucar_lang',currentLang);el('langToggle').value=currentLang;var d=i18n[currentLang]||i18n.en;document.querySelectorAll('[data-i18n]').forEach(function(e){var k=e.dataset.i18n;if(d[k])e.textContent=d[k];});}
 
 // ===== COGNITO CONFIG =====
 (async () => {
@@ -1044,6 +1058,10 @@ function psap() {
 (async function() {
   var r = await api('/api/me');
   if (r.body.authenticated && r.body.role === 'agent') enter({ name: r.body.name, staff_role: 'operator', agent_id: '' });
+
+  // Restore language
+  var saved = localStorage.getItem('insucar_lang') || 'en';
+  setLang(saved);
 
   // Queue filter buttons
   document.querySelectorAll('#qFilters .qp-filter').forEach(function(btn) {
