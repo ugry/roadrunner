@@ -161,7 +161,6 @@ spec:
     }
 
     stage('Direct deploy (kubectl fallback)') {
-      when { expression { return env.BRANCH_NAME == 'main' } }
       steps {
         container('tools') {
           sh '''
