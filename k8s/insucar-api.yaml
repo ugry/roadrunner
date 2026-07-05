@@ -33,9 +33,9 @@ data:
   COGNITO_STAFF_CLIENT_IDS: "2emse8epipp11skn1irea09q3m"
   # Frontend Cognito config (fed to /api/auth/config for PKCE OAuth2):
   COGNITO_CUSTOMER_DOMAIN: "insucar-dev-customer"
-  COGNITO_CUSTOMER_CLIENT_ID: "REPLACE_customer_client_id"
+  COGNITO_CUSTOMER_CLIENT_ID: "7n33nbhutvt7r3fia98bcksbt0"
   COGNITO_STAFF_DOMAIN: "insucar-dev-staff"
-  COGNITO_STAFF_CLIENT_ID: "REPLACE_staff_public_client_id"
+  COGNITO_STAFF_CLIENT_ID: "2emse8epipp11skn1irea09q3m"
   PROVIDER_API_URL: "http://provider-axa.insucar.svc.cluster.local:5678"
   STATUS_LINK_BASE: "https://app.unysolar.com/status"
 ---
@@ -57,10 +57,12 @@ spec:
           envFrom:
             # Non-secret config (AWS_REGION, EVENT_BUS_NAME, COGNITO_*, PROVIDER_API_URL, STATUS_LINK_BASE)
             - configMapRef: { name: insucar-config }
-            # Managed-service credentials: DATABASE_URL (RDS) + REDIS_URL (ElastiCache).
-            # Create from Terraform outputs, e.g.:
+            # Managed-service credentials: DATABASE_URL (RDS) + SESSION_SECRET.
+            # Also supports: REDIS_URL (ElastiCache) for session store / caching.
+            # Create from Terraform outputs or current live values:
             #   kubectl -n insucar create secret generic insucar-app \
-            #     --from-literal=DATABASE_URL="postgres://insucar_admin:<pw>@<rds-endpoint>:5432/insucar?sslmode=require" \
+            #     --from-literal=DATABASE_URL="postgres://postgres:test@postgres.insucar.svc.cluster.local:5432/insucar?sslmode=disable" \
+            #     --from-literal=SESSION_SECRET="<random-64-char-hex>" \
             #     --from-literal=REDIS_URL="rediss://:<auth>@<redis-endpoint>:6379"
             - secretRef: { name: insucar-app }
           ports: [ { containerPort: 8080 } ]
@@ -80,6 +82,6 @@ apiVersion: v1
 kind: Service
 metadata: { name: insucar-api, namespace: insucar }
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector: { app: insucar-api }
   ports: [ { port: 80, targetPort: 8080 } ]
