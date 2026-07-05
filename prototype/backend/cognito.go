@@ -21,7 +21,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var cognito *cognitoVerifier
+var cognito *cognitoVerifier        // primary (customer) pool verifier
+var cognitoStaff *cognitoVerifier   // staff pool verifier (when separate pools are used)
 
 type cognitoVerifier struct {
 	issuer    string
@@ -38,13 +39,25 @@ func newCognitoVerifier() *cognitoVerifier {
 	if iss == "" {
 		return nil
 	}
+	return newVerifierFromIssuer(iss, os.Getenv("COGNITO_CLIENT_IDS"))
+}
+
+func newCognitoStaffVerifier() *cognitoVerifier {
+	iss := strings.TrimRight(os.Getenv("COGNITO_STAFF_ISSUER"), "/")
+	if iss == "" {
+		return nil
+	}
+	return newVerifierFromIssuer(iss, os.Getenv("COGNITO_STAFF_CLIENT_IDS"))
+}
+
+func newVerifierFromIssuer(issuer, clientIDsEnv string) *cognitoVerifier {
 	v := &cognitoVerifier{
-		issuer:    iss,
-		jwksURL:   iss + "/.well-known/jwks.json",
+		issuer:    issuer,
+		jwksURL:   issuer + "/.well-known/jwks.json",
 		clientIDs: map[string]bool{},
 		keys:      map[string]*rsa.PublicKey{},
 	}
-	for _, c := range strings.Split(os.Getenv("COGNITO_CLIENT_IDS"), ",") {
+	for _, c := range strings.Split(clientIDsEnv, ",") {
 		if c = strings.TrimSpace(c); c != "" {
 			v.clientIDs[c] = true
 		}
@@ -161,18 +174,22 @@ func (v *cognitoVerifier) verify(tokenStr string) (*cognitoIdentity, error) {
 }
 
 func bearerIdentity(r *http.Request) (*cognitoIdentity, bool) {
-	if cognito == nil {
-		return nil, false
-	}
 	h := r.Header.Get("Authorization")
 	if !strings.HasPrefix(h, "Bearer ") {
 		return nil, false
 	}
-	id, err := cognito.verify(strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
-	if err != nil {
-		return nil, false
+	tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	// Try primary (customer) verifier first, then staff verifier
+	for _, v := range []*cognitoVerifier{cognito, cognitoStaff} {
+		if v == nil {
+			continue
+		}
+		id, err := v.verify(tok)
+		if err == nil {
+			return id, true
+		}
 	}
-	return id, true
+	return nil, false
 }
 
 var staffGroups = map[string]bool{

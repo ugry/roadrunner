@@ -65,6 +65,12 @@ func main() {
 			log.Printf("cognito jwks prefetch failed (will retry lazily): %v", err)
 		}
 	}
+	cognitoStaff = newCognitoStaffVerifier()
+	if cognitoStaff != nil {
+		if err := cognitoStaff.refresh(context.Background()); err != nil {
+			log.Printf("cognito staff jwks prefetch failed (will retry lazily): %v", err)
+		}
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealth)
@@ -126,8 +132,8 @@ func main() {
 
 	startProviderHealthLoop(context.Background())
 
-	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; tenant=%s)",
-		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, defaultTenantID[:min(8, len(defaultTenantID))])
+	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; cognitoStaff=%v; tenant=%s)",
+		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, cognitoStaff != nil, defaultTenantID[:min(8, len(defaultTenantID))])
 	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(logMW(rateLimitMW(mux)))))
 }
 
@@ -217,7 +223,7 @@ func parseToken(tok string) (role, id, name string, ok bool) {
 }
 func setSession(w http.ResponseWriter, role, id, name string) {
 	http.SetCookie(w, &http.Cookie{Name: "insucar_session", Value: makeToken(role, id, name),
-		Path: "/", HttpOnly: true, MaxAge: 8 * 3600, SameSite: http.SameSiteLaxMode})
+		Path: "/", HttpOnly: true, Secure: true, MaxAge: 8 * 3600, SameSite: http.SameSiteLaxMode})
 }
 func currentSession(r *http.Request) (role, id, name string, ok bool) {
 	c, err := r.Cookie("insucar_session")
