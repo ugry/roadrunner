@@ -49,6 +49,7 @@
    .panic-btn{display:flex;align-items:center;gap:8px;background:#fff5f5;border:2px solid #e74c3c;border-radius:10px;padding:10px 14px;font-weight:700;font-size:13px;color:#e74c3c;cursor:pointer;width:100%;text-align:left;margin:8px 0}.panic-btn:hover{background:#ffeaea}
    .wiz-nav{display:flex;justify-content:space-between;gap:10px;margin-top:16px}.wiz-nav button{flex:1}
    @media(prefers-contrast:more){:root{--line:#8b9ea7;--muted:#4a5568;--fg:#000}.card{border-width:2px}.btn{font-weight:800}}
+   @media(prefers-color-scheme:dark){:root{--brand:#12a06f;--bg:#0b1f2a;--surface:#12303e;--line:#1e3a4a;--muted:#7a8fa0;--fg:#e8f0f4;--navy:#e8f0f4}body{background:radial-gradient(1100px 560px at 82% -12%,rgba(10,125,90,.15),transparent 60%),var(--bg)}input,select,textarea,.topbtn{background:#1a3545;border-color:var(--line);color:var(--fg)}.case-item{background:#152d3a}.btn-ghost{background:#1a3545}.btn-primary{color:#fff}}
 </style></head>
 <body>
 <div class="bar">
@@ -92,11 +93,13 @@
          <!-- 4-step wizard progress -->
          <div class="wiz-steps"><div class="wiz-step now" id="ws1"></div><div class="wiz-step" id="ws2"></div><div class="wiz-step" id="ws3"></div><div class="wiz-step" id="ws4"></div></div>
          <!-- Step 1: What happened -->
-         <div id="wizard1"><label for="i_type">What happened?</label><select id="i_type"><option value="breakdown">Car won't start</option><option value="accident">Accident</option><option value="flat_tyre">Flat tyre</option><option value="ev_no_charge">EV — no charge</option><option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option></select><button class="btn btn-primary" onclick="nextWiz(2)">Next →</button></div>
+         <div id="wizard1"><label for="i_type">What happened?</label><select id="i_type"><option value="breakdown">Car won't start</option><option value="accident">Accident</option><option value="flat_tyre">Flat tyre</option><option value="ev_no_charge">EV — no charge</option><option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option></select><button class="btn btn-ghost" style="margin-top:6px" onclick="startVoiceGuidance()">🎤 Describe with voice</button><button class="btn btn-primary" onclick="nextWiz(2)">Next →</button></div>
          <!-- Step 2: Where -->
          <div id="wizard2" class="hidden"><label for="i_addr">Where are you?</label><input id="i_addr" placeholder="A6 southbound, km 292" aria-label="Location"><button type="button" class="btn-ghost" style="width:auto;padding:4px 10px;font-size:12px;margin:4px 0" onclick="getGPSLocation()">📍 Use GPS</button><input id="i_w3w" placeholder="///what.three.words" style="font-family:monospace;font-size:13px;margin-top:6px" aria-label="what3words"><label for="i_photo">Photo of scene <span style="font-size:11px;color:var(--muted);font-weight:400">(optional)</span></label><input type="file" id="i_photo" accept="image/*" capture="environment" onchange="previewPhoto()" style="padding:9px;margin-bottom:6px"><img id="photoPreview" style="display:none;max-width:100%;max-height:180px;border-radius:8px;margin-bottom:8px;border:1px solid var(--line)"><div class="wiz-nav"><button class="btn btn-ghost" onclick="nextWiz(1)">← Back</button><button class="btn btn-primary" onclick="nextWiz(3)">Next →</button></div></div>
          <!-- Step 3: Describe -->
-         <div id="wizard3" class="hidden"><label for="i_desc">Describe the situation</label><textarea id="i_desc" rows="3" placeholder="What happened? Any injuries? Is the vehicle in a safe position?" aria-label="Description"></textarea><button class="panic-btn" onclick="panicMode()" aria-label="I don't feel safe — escalate priority"><span style="font-size:18px">🆘</span> I don't feel safe — escalate immediately</button><div class="wiz-nav"><button class="btn btn-ghost" onclick="nextWiz(2)">← Back</button><button class="btn btn-primary" onclick="nextWiz(4)">Next →</button></div></div>
+         <div id="wizard3" class="hidden"><label for="i_desc">Describe the situation</label><textarea id="i_desc" rows="3" placeholder="What happened? Any injuries? Is the vehicle in a safe position?" aria-label="Description"></textarea>
+         <div style="display:flex;gap:4px;margin:6px 0"><button type="button" class="btn-ghost" style="width:auto;padding:3px 8px;font-size:10px;margin:0" onclick="showPhrases('en')">EN</button><button type="button" class="btn-ghost" style="width:auto;padding:3px 8px;font-size:10px;margin:0" onclick="showPhrases('fr')">FR</button><button type="button" class="btn-ghost" style="width:auto;padding:3px 8px;font-size:10px;margin:0" onclick="showPhrases('de')">DE</button><button type="button" class="btn-ghost" style="width:auto;padding:3px 8px;font-size:10px;margin:0" onclick="showPhrases('es')">ES</button></div>
+         <div id="phraseCards"></div><button class="panic-btn" onclick="panicMode()" aria-label="I don't feel safe — escalate priority"><span style="font-size:18px">🆘</span> I don't feel safe — escalate immediately</button><div class="wiz-nav"><button class="btn btn-ghost" onclick="nextWiz(2)">← Back</button><button class="btn btn-primary" onclick="nextWiz(4)">Next →</button></div></div>
          <!-- Step 4: Confirm -->
          <div id="wizard4" class="hidden"><div style="text-align:center;padding:10px 0"><b id="wizSummary" style="font-size:15px"></b></div><div id="holdBtn" style="position:relative;margin-top:8px" onmousedown="startHold()" onmouseup="cancelHold()" onmouseleave="cancelHold()" ontouchstart="startHold()" ontouchend="cancelHold()" ontouchcancel="cancelHold()"><button class="btn btn-danger" style="position:relative;z-index:1;pointer-events:none" aria-label="Press and hold for 3 seconds to request assistance">🚨 Press &amp; hold to request help</button><div id="holdProgress" style="position:absolute;top:0;left:0;height:100%;background:var(--brand);border-radius:10px;width:0%;transition:none;z-index:0;opacity:0.3"></div></div><button class="btn btn-ghost" style="margin-top:8px" onclick="nextWiz(3)">← Back</button></div>
        </div></div>
@@ -307,6 +310,15 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   var s = el('i_type'); if (s) obs.observe(s, { attributes: true });
 });
+// Emergency phrase cards — multi-language quick phrases
+var phrases = { en: ['I need help','I had an accident','My car won\'t start','I have a flat tyre','I am on the highway','I need an ambulance'], fr: ['J\'ai besoin d\'aide','J\'ai eu un accident','Ma voiture ne démarre pas','J\'ai un pneu crevé','Je suis sur l\'autoroute','J\'ai besoin d\'une ambulance'], de: ['Ich brauche Hilfe','Ich hatte einen Unfall','Mein Auto startet nicht','Ich habe einen platten Reifen','Ich bin auf der Autobahn','Ich brauche einen Krankenwagen'], es: ['Necesito ayuda','Tuve un accidente','Mi coche no arranca','Tengo un pinchazo','Estoy en la autopista','Necesito una ambulancia'] };
+function showPhrases(lang) {
+  var p = phrases[lang] || phrases.en;
+  var h = '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">';
+  p.forEach(function(ph) { h += '<button class="btn-ghost" style="width:auto;padding:4px 8px;font-size:11px;margin:0" onclick="el(\'i_desc\').value=\''+ph+'\'">'+ph+'</button>'; });
+  h += '</div>';
+  el('phraseCards').innerHTML = h;
+}
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
 </script>
 </body></html>
