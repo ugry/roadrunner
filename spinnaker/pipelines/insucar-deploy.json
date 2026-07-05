@@ -1,35 +1,33 @@
 {
   "application": "insucar",
-  "id": "584af310-21f5-427d-ac3b-a0d5c065fc18",
-  "index": 0,
   "keepWaitingPipelines": false,
-  "limitConcurrent": true,
+  "limitConcurrent": false,
   "name": "deploy-insucar-api",
-  "schema": "1",
   "parameterConfig": [
     {
-      "name": "imageTag",
       "default": "latest",
       "description": "ECR image tag to deploy. Set by the Jenkins CI webhook (parameters.imageTag); falls back to 'latest' for manual runs.",
-      "required": false,
+      "hasOptions": false,
+      "name": "imageTag",
       "pinned": true,
-      "hasOptions": false
+      "required": false
     },
     {
-      "name": "gitCommit",
       "default": "unknown",
       "description": "Git commit SHA that produced this image (traceability; set by CI).",
-      "required": false,
-      "hasOptions": false
+      "hasOptions": false,
+      "name": "gitCommit",
+      "required": false
     },
     {
-      "name": "gitAuthor",
       "default": "unknown",
       "description": "Git commit author that produced this image (traceability; set by CI).",
-      "required": false,
-      "hasOptions": false
+      "hasOptions": false,
+      "name": "gitAuthor",
+      "required": false
     }
   ],
+  "schema": "1",
   "stages": [
     {
       "account": "insucar-eks",
@@ -39,16 +37,16 @@
           "apiVersion": "apps/v1",
           "kind": "Deployment",
           "metadata": {
+            "annotations": {
+              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
+              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
+              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
+            },
             "labels": {
               "app": "insucar-api"
             },
-            "annotations": {
-              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
-              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
-              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
-            },
             "name": "insucar-api",
-            "namespace": "insucar"
+            "namespace": "insucar-dev"
           },
           "spec": {
             "replicas": 2,
@@ -120,7 +118,7 @@
           "kind": "Service",
           "metadata": {
             "name": "insucar-api",
-            "namespace": "insucar"
+            "namespace": "insucar-dev"
           },
           "spec": {
             "ports": [
@@ -143,7 +141,7 @@
               "app": "insucar-worker"
             },
             "name": "insucar-worker",
-            "namespace": "insucar"
+            "namespace": "insucar-dev"
           },
           "spec": {
             "replicas": 2,
@@ -159,16 +157,8 @@
                 }
               },
               "spec": {
-                "serviceAccountName": "insucar-api",
-                "imagePullSecrets": [
-                  {
-                    "name": "ecr-cred"
-                  }
-                ],
                 "containers": [
                   {
-                    "name": "insucar-worker",
-                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
                     "envFrom": [
                       {
                         "configMapRef": {
@@ -181,18 +171,26 @@
                         }
                       }
                     ],
+                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
+                    "name": "insucar-worker",
                     "resources": {
-                      "requests": {
-                        "cpu": "50m",
-                        "memory": "32Mi"
-                      },
                       "limits": {
                         "cpu": "250m",
                         "memory": "128Mi"
+                      },
+                      "requests": {
+                        "cpu": "50m",
+                        "memory": "32Mi"
                       }
                     }
                   }
-                ]
+                ],
+                "imagePullSecrets": [
+                  {
+                    "name": "ecr-cred"
+                  }
+                ],
+                "serviceAccountName": "insucar-api"
               }
             }
           }
@@ -211,14 +209,14 @@
       "failPipeline": true,
       "instructions": "Approve promotion to UAT. Requires the 'insucar-releasers' or 'insucar-product-owners' role.",
       "judgmentInputs": [],
-      "selectedStageRoles": [
-        "insucar-releasers",
-        "insucar-product-owners"
-      ],
       "name": "Promote to UAT?",
       "refId": "2",
       "requisiteStageRefIds": [
-        "6"
+        "1"
+      ],
+      "selectedStageRoles": [
+        "insucar-releasers",
+        "insucar-product-owners"
       ],
       "type": "manualJudgment"
     },
@@ -230,13 +228,13 @@
           "apiVersion": "apps/v1",
           "kind": "Deployment",
           "metadata": {
+            "annotations": {
+              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
+              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
+              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
+            },
             "labels": {
               "app": "insucar-api"
-            },
-            "annotations": {
-              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
-              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
-              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
             },
             "name": "insucar-api",
             "namespace": "insucar-uat"
@@ -350,16 +348,8 @@
                 }
               },
               "spec": {
-                "serviceAccountName": "insucar-api",
-                "imagePullSecrets": [
-                  {
-                    "name": "ecr-cred"
-                  }
-                ],
                 "containers": [
                   {
-                    "name": "insucar-worker",
-                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
                     "envFrom": [
                       {
                         "configMapRef": {
@@ -372,18 +362,26 @@
                         }
                       }
                     ],
+                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
+                    "name": "insucar-worker",
                     "resources": {
-                      "requests": {
-                        "cpu": "50m",
-                        "memory": "32Mi"
-                      },
                       "limits": {
                         "cpu": "250m",
                         "memory": "128Mi"
+                      },
+                      "requests": {
+                        "cpu": "50m",
+                        "memory": "32Mi"
                       }
                     }
                   }
-                ]
+                ],
+                "imagePullSecrets": [
+                  {
+                    "name": "ecr-cred"
+                  }
+                ],
+                "serviceAccountName": "insucar-api"
               }
             }
           }
@@ -402,16 +400,15 @@
     },
     {
       "failPipeline": true,
-      "instructions": "Approve promotion to PROD. Restricted to the 'insucar-product-owners' role (no self-approval by the requester). Canary analysis results are attached below for review.",
+      "instructions": "Approve promotion to PROD. Restricted to the 'insucar-product-owners' role (no self-approval by the requester).",
       "judgmentInputs": [],
-      "selectedStageRoles": [
-        "insucar-product-owners"
-      ],
       "name": "Promote to PROD? (product owner)",
       "refId": "4",
       "requisiteStageRefIds": [
-        "7",
-        "canary"
+        "3"
+      ],
+      "selectedStageRoles": [
+        "insucar-product-owners"
       ],
       "type": "manualJudgment"
     },
@@ -423,13 +420,13 @@
           "apiVersion": "apps/v1",
           "kind": "Deployment",
           "metadata": {
+            "annotations": {
+              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
+              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
+              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
+            },
             "labels": {
               "app": "insucar-api"
-            },
-            "annotations": {
-              "insucar.io/git-commit": "${ (trigger.payload?.parameters?.gitCommit ?: parameters.gitCommit) ?: 'unknown' }",
-              "insucar.io/git-author": "${ (trigger.payload?.parameters?.gitAuthor ?: parameters.gitAuthor) ?: 'unknown' }",
-              "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
             },
             "name": "insucar-api",
             "namespace": "insucar-prod"
@@ -543,16 +540,8 @@
                 }
               },
               "spec": {
-                "serviceAccountName": "insucar-api",
-                "imagePullSecrets": [
-                  {
-                    "name": "ecr-cred"
-                  }
-                ],
                 "containers": [
                   {
-                    "name": "insucar-worker",
-                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
                     "envFrom": [
                       {
                         "configMapRef": {
@@ -565,18 +554,26 @@
                         }
                       }
                     ],
+                    "image": "${ '326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker:' + ((trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest') }",
+                    "name": "insucar-worker",
                     "resources": {
-                      "requests": {
-                        "cpu": "50m",
-                        "memory": "32Mi"
-                      },
                       "limits": {
                         "cpu": "250m",
                         "memory": "128Mi"
+                      },
+                      "requests": {
+                        "cpu": "50m",
+                        "memory": "32Mi"
                       }
                     }
                   }
-                ]
+                ],
+                "imagePullSecrets": [
+                  {
+                    "name": "ecr-cred"
+                  }
+                ],
+                "serviceAccountName": "insucar-api"
               }
             }
           }
@@ -592,134 +589,7 @@
       ],
       "source": "text",
       "type": "deployManifest"
-    },
-    {
-      "name": "Smoke test DEV",
-      "type": "webhook",
-      "refId": "6",
-      "requisiteStageRefIds": [
-        "1"
-      ],
-      "method": "GET",
-      "url": "http://insucar-api.insucar-dev.svc.cluster.local/healthz",
-      "waitForCompletion": true,
-      "failPipeline": true,
-      "continuePipeline": false
-    },
-    {
-      "name": "Smoke test UAT",
-      "type": "webhook",
-      "refId": "7",
-      "requisiteStageRefIds": [
-        "3"
-      ],
-      "method": "GET",
-      "url": "http://insucar-api.insucar-uat.svc.cluster.local/healthz",
-      "waitForCompletion": true,
-      "failPipeline": true,
-      "continuePipeline": false
-    },
-    {
-      "name": "Smoke test PROD",
-      "type": "webhook",
-      "refId": "8",
-      "requisiteStageRefIds": [
-        "5"
-      ],
-      "method": "GET",
-      "url": "https://op.unysolar.com/healthz",
-      "waitForCompletion": true,
-      "failPipeline": false,
-      "continuePipeline": true
-    },
-    {
-      "name": "Rollback PROD",
-      "type": "undoRolloutManifest",
-      "account": "insucar-eks",
-      "cloudProvider": "kubernetes",
-      "location": "insucar-prod",
-      "mode": "static",
-      "manifestName": "deployment insucar-api",
-      "numRevisionsBack": 1,
-      "refId": "9",
-      "requisiteStageRefIds": [
-        "8"
-      ],
-      "stageEnabled": {
-        "type": "expression",
-        "expression": "${ #stage('Smoke test PROD').status != 'SUCCEEDED' }"
-      }
-    },
-    {
-      "name": "Verify PROD health",
-      "type": "checkPreconditions",
-      "refId": "10",
-      "requisiteStageRefIds": [
-        "9"
-      ],
-      "failPipeline": true,
-      "preconditions": [
-        {
-          "type": "expression",
-          "failPipeline": true,
-          "context": {
-            "expression": "${ #stage('Smoke test PROD').status == 'SUCCEEDED' }"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Canary analysis",
-      "type": "canary",
-      "refId": "canary",
-      "requisiteStageRefIds": [
-        "7"
-      ],
-      "canaryConfig": {
-        "lifetimeDuration": "PT10M",
-        "analysisInterval": "PT2M",
-        "trafficPercentage": 5,
-        "judge": "NetflixACAJudge-v1.0",
-        "canaryHealthCheckHandler": {
-          "minimumCanaryResultScore": 75
-        },
-        "canarySuccessCriteria": {
-          "canaryResultScore": 75
-        },
-        "metrics": [
-          {
-            "name": "error_rate",
-            "query": {
-              "type": "prometheus",
-              "metricName": "http_requests_total",
-              "labelBindings": ["status=~'5..'"]
-            },
-            "analysisConfigurations": {
-              "canary": {
-                "direction": "increase",
-                "allowedIncrease": 2.0
-              }
-            }
-          },
-          {
-            "name": "latency_p99",
-            "query": {
-              "type": "prometheus",
-              "metricName": "http_request_duration_seconds",
-              "labelBindings": ["quantile='0.99'"]
-            },
-            "analysisConfigurations": {
-              "canary": {
-                "direction": "increase",
-                "allowedIncrease": 500
-              }
-            }
-          }
-        ]
-      },
-      "comments": "Kayenta canary: deploys 5% traffic for 10 min, auto-rollback if error rate > 2x baseline or p99 latency > 500ms increase"
     }
   ],
-  "triggers": [],
-  "updateTs": "1783236300000"
+  "triggers": []
 }
