@@ -236,6 +236,9 @@ async function loadCases(){const r=await api('/api/user/cases');const c=r.body.c
   h+='<div class="case-item"><div class="case-top"><span class="case-no">'+esc(x.case_number.replace('CASE-','Case #'))+'</span><span class="pill">'+esc(x.status)+'</span></div>';
   h+='<div class="case-type">'+esc(x.incident).replace(/_/g,' ')+'</div>';
   if(x.description) h+='<div class="case-desc">'+esc(x.description)+'</div>';
+  if(x.status==='dispatched'||x.status==='en_route'){
+    h+='<button class="btn btn-primary" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="confirmArrival(\''+x.id+'\')">✅ Provider has arrived</button>';
+  }
   if(x.status==='resolved'&&!rated){
     h+='<div class="rating" style="margin-top:8px;display:flex;gap:4px">';
     for(var s=1;s<=5;s++) h+='<span onclick="rateCase(\''+x.id+'\','+s+')" style="cursor:pointer;font-size:22px;color:#e3ece8" onmouseover="this.style.color=\'#f5a623\'" onmouseout="this.style.color=\'#e3ece8\'">★</span>';
@@ -250,6 +253,23 @@ async function rateCase(caseNo, score) {
   if (r.ok) loadCases();
   else alert('Rating failed: ' + (r.body.error || ''));
 }
+async function confirmArrival(caseId) {
+  var r = await api('/api/case/arrived', { method: 'POST', body: JSON.stringify({ caseID: caseId }) });
+  if (r.ok) { alert('✅ Arrival confirmed. Thank you!'); loadCases(); }
+  else alert('Failed: ' + (r.body.error || ''));
+}
+// Service Worker for push notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+    console.log('SW registered');
+    if ('PushManager' in window) {
+      Notification.requestPermission().then(function(perm) {
+        if (perm === 'granted') reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8('BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U') }).then(function(sub) { console.log('Push subscribed'); }).catch(function(e) { console.log('Push failed:', e); });
+      });
+    }
+  }).catch(function(e) { console.log('SW failed:', e); });
+}
+function urlB64ToUint8(b64) { var pad='='.repeat((4-b64.length%4)%4); var raw=atob((b64+pad).replace(/-/g,'+').replace(/_/g,'/')); var out=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i); return out; }
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
 </script>
 </body></html>

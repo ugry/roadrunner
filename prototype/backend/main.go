@@ -96,6 +96,8 @@ func main() {
 	mux.HandleFunc("/api/agent/stats", requireRole("agent", handleAgentStats))
 	mux.HandleFunc("/api/agent/sms-journey", requireRole("agent", handleSmsJourney))
 	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
+	mux.HandleFunc("/api/case/arrived", requireRole("user", handleCaseArrived))
+	mux.HandleFunc("/api/agent/predict-eta", requireRole("agent", handlePredictEta))
 
 	// auth config (Cognito setup exposed to frontends)
 	mux.HandleFunc("/api/auth/config", handleAuthConfig)
@@ -907,6 +909,51 @@ func handleCaseRate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, map[string]any{"case_id": in.CaseID, "score": in.Score, "status": "rated"})
+}
+
+// Case arrived: motorist confirms provider has arrived on scene.
+func handleCaseArrived(w http.ResponseWriter, r *http.Request) {
+	var in struct{ CaseID string }
+	json.NewDecoder(r.Body).Decode(&in)
+	uid := ""
+	if c, ok := callerFrom(r); ok { uid = c.ID }
+	var owner string
+	if db.QueryRow(r.Context(), `SELECT customer_id FROM cases WHERE id=$1`, in.CaseID).Scan(&owner) != nil || owner != uid {
+		writeJSON(w, 403, map[string]string{"error": "not your case"})
+		return
+	}
+	db.Exec(r.Context(), `UPDATE cases SET status='on_site' WHERE id=$1`, in.CaseID)
+	db.Exec(r.Context(), `UPDATE missions SET status='on_site' WHERE case_id=$1`, in.CaseID)
+	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'arrived','Motorist confirmed provider arrival')`, in.CaseID)
+	publishSSE("case.updated", map[string]any{"case_id": in.CaseID, "status": "on_site"})
+	writeJSON(w, 200, map[string]any{"case_id": in.CaseID, "status": "on_site"})
+}
+
+// Predictive ETA: adjusts based on time of day (rush hour penalty) and provider performance.
+func handlePredictEta(w http.ResponseWriter, r *http.Request) {
+	caseID := r.URL.Query().Get("case_id")
+	if caseID == "" {
+		writeJSON(w, 400, map[string]string{"error": "case_id required"})
+		return
+	}
+	var baseETA int
+	db.QueryRow(r.Context(), `SELECT coalesce(eta_minutes,20) FROM missions WHERE case_id=$1 ORDER BY created_at DESC LIMIT 1`, caseID).Scan(&baseETA)
+
+	// Traffic multiplier: rush hour (7-9am, 4-7pm) = 1.5x, weekend = 0.8x
+	now := time.Now()
+	hour := now.Hour()
+	mult := 1.0
+	if (hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19) { mult = 1.5 }
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday { mult = 0.8 }
+	adjusted := int(float64(baseETA) * mult)
+
+	writeJSON(w, 200, map[string]any{
+		"case_id":    caseID,
+		"base_eta":   baseETA,
+		"adjusted":   adjusted,
+		"multiplier": mult,
+		"rush_hour":  (hour >= 7 && hour <= 9) || (hour >= 16 && hour <= 19),
+	})
 }
 
 func callProvider(ctx context.Context, caseID, service string) (int, bool) {
