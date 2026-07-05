@@ -333,15 +333,18 @@ Let me trace Claire's emotional state at each step of the current flow:
 
 ## 4. RECOMMENDED IMMEDIATE FIXES (P0 — Must fix before any real user)
 
-| # | Fix | File | Lines to change |
+> **Full implementation specs:** See `improvements.md` §7 and `architectuxobservations.md`.  
+> **Tracked as:** GitHub Issues #26–#32.
+
+| # | Fix | Issue | Effort |
 |---|---|---|---|
-| 1 | **Post-submission tracking view** — After incident, replace the form with a tracking page showing "Help is coming. ETA: ~22 min. Pierre L., TOW-77-FR. [Track on map]" | enduser.html | Dashboard panel replacement (~30 lines) |
-| 2 | **Auto-detect GPS on dashboard load** — Don't wait for user to click "Use my location". Auto-detect on page load and pre-fill. | enduser.html | Call `getGPSLocation()` in `enter()` |
-| 3 | **Replace alert() with inline confirmation** — Remove `alert()` and show a green banner: "✅ Help requested! Case #XXX. A coordinator is finding help now." | enduser.html | submitIncident() handler |
-| 4 | **Add "Call us" button on login page** — "Can't log in? Call +33800000000" visible ABOVE the login form | enduser.html | Auth card HTML |
-| 5 | **Post-dispatch mission monitoring panel** — New panel in operator console showing all dispatched cases with live ETA timers | operator.html | New panel after dispatch panel |
-| 6 | **Wire triage buttons to DB + priority logic** — On any "NO" to safety → priority=emergency. On any dangerous answer → enable PSAP. Save all answers. | operator.html | triage button onclick handlers + backend endpoint |
-| 7 | **Duplicate call detection** — Before creating new case, check if customer has existing OPEN case. If yes, link incoming call to existing. | main.go | handleMockIncoming handler |
+| X1 | Post-submission tracking view | #26 | 3h |
+| X2 | Auto-detect GPS on dashboard load | #27 | 15m |
+| X3 | Replace alert() with inline confirmation | #28 | 20m |
+| X4 | "Call us" button on login page | #29 | 10m |
+| X5 | Mission monitoring panel | #30 | 4h |
+| X6 | Wire triage buttons to DB + priority logic | #31 | 3h |
+| X7 | Duplicate call detection | #32 | 2h |
 
 ---
 

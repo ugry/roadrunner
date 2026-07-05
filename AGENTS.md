@@ -1,7 +1,7 @@
 # Insucar — Agent Guide
 
 ## Project
-Roadside assistance platform (Go backend, React frontend, AWS/EKS/Spinnaker CI/CD).
+Roadside assistance platform (Go backend, Vanilla HTML/JS SPA frontend, AWS/EKS/Spinnaker CI/CD).
 
 ## Stack
 - **Backend:** Go 1.25, PostgreSQL/PostGIS, Redis, AWS SNS/EventBridge

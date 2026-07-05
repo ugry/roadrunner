@@ -360,6 +360,9 @@ json.NewDecoder(r.Body).Decode(&in)  // accepts {"email": 123, "password": [1,2,
 
 ### CRITICAL UX (this week)
 
+> **Full specs:** `improvements.md` §7 and `architectuxobservations.md`.  
+> **Tracked as:** GitHub Issues #26–#32.
+
 | Order | Action | Time | Issue |
 |---|---|---|---|
 | 16 | P0-X1: Post-submission tracking view | 3h | #26 |
