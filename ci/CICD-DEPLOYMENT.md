@@ -10,7 +10,7 @@ Deployed to AWS account 326804802908, region eu-west-1.
 
 ## Jenkins (namespace: jenkins)
 - Install: Helm chart `jenkins/jenkins` with `ci/jenkins-values.yaml` (Config-as-Code).
-- URL: http://a69a0dc446e674657ac3fae06d8dd559-1651454478.eu-west-1.elb.amazonaws.com:8080
+- URL: https://jenkins.unysolar.com
 - Login: admin / InsucarAdmin!2026   (CHANGE THIS)
 - JCasC created: `github-pat` credential + seeded pipeline job `insucar-ci`
   (pulls this repo, runs `ci/Jenkinsfile`).
@@ -20,8 +20,8 @@ Deployed to AWS account 326804802908, region eu-west-1.
 ## Spinnaker (namespace: spinnaker; operator in spinnaker-operator)
 - Install: spinnaker-operator (cluster mode) + `SpinnakerService` (v1.36.1).
 - Services running (OK): clouddriver, orca, gate, deck, front50, rosco, igor, echo, redis.
-- Deck (UI):  http://a4977860e39434f278d0b4dedbcd4bb5-449340997.eu-west-1.elb.amazonaws.com
-- Gate (API): http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com  (/health = UP)
+- Deck (UI):  https://spinnaker.unysolar.com
+- Gate (API): https://gate.unysolar.com  (/health = UP)
 - Persistence: S3 bucket `insucar-spinnaker-326804802908` (Front50).
 - CI integration: igor lists Jenkins master `insucar-jenkins` (verified via Gate /v3/builds).
 - Kubernetes deploy provider: disabled at bring-up; add a SpinnakerAccount (in-cluster SA) next.

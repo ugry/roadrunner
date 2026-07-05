@@ -32,7 +32,7 @@ You are a senior software architect and DevOps engineer working on the **Insucar
 - Go compiler at `~/.local/go/bin/go`
 - crane for OCI image manipulation
 - Jenkins API: admin / InsucarAdmin!2026
-- Spinnaker Gate: http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com
+- Spinnaker Gate: https://gate.unysolar.com
 
 ## Current Milestone (from AGENTS.md)
 Work through remaining priority tasks in order, following CI/CD:

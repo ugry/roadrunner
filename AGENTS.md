@@ -40,9 +40,9 @@ insucar/
 
 ## Key Credentials (access.md — DO NOT EXPOSE)
 - AWS Account: 326804802908 (eu-west-1)
-- Jenkins: http://a69a0dc446e674657ac3fae06d8dd559-1651454478.eu-west-1.elb.amazonaws.com:8080
-- Spinnaker Deck: http://a4977860e39434f278d0b4dedbcd4bb5-449340997.eu-west-1.elb.amazonaws.com
-- Spinnaker Gate: http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com
+- Jenkins: https://jenkins.unysolar.com
+- Spinnaker Deck: https://spinnaker.unysolar.com
+- Spinnaker Gate: https://gate.unysolar.com
 
 ## Git Conventions
 - Branch: `main` (push directly)

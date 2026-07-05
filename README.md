@@ -13,8 +13,8 @@
 | **End-user app** | https://unysolar.com/app |
 | **Operator console** | https://op.unysolar.com/ |
 | **GitHub Issues** | https://github.com/ugry/insucar/issues (29 open) |
-| **Jenkins CI** | http://a69a0dc446e674657ac3fae06d8dd559-1651454478.eu-west-1.elb.amazonaws.com:8080 |
-| **Spinnaker Deck** | http://a4977860e39434f278d0b4dedbcd4bb5-449340997.eu-west-1.elb.amazonaws.com |
+| **Jenkins CI** | https://jenkins.unysolar.com |
+| **Spinnaker Deck** | https://spinnaker.unysolar.com |
 
 ## Repository Map
 

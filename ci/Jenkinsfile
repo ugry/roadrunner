@@ -40,7 +40,7 @@ spec:
     ECR   = "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-api"
     ECR_WORKER = "326804802908.dkr.ecr.eu-west-1.amazonaws.com/insucar-worker"
     TAG   = "${env.BUILD_NUMBER}"
-    SPINNAKER_WEBHOOK = "http://afac25beae62d4f0cab340b254e5e6f2-1288246793.eu-west-1.elb.amazonaws.com/webhooks/webhook/insucar-ci"
+    SPINNAKER_WEBHOOK = "https://gate.unysolar.com/webhooks/webhook/insucar-ci"
   }
 
   options { disableConcurrentBuilds() }
