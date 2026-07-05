@@ -1131,10 +1131,6 @@ async function submitTriage() {
   })});
   if (r.ok && r.body.priority_escalated) loadQueue();
 }
-  if (action === 'call_customer') {
-    el('popline').innerHTML = '📞 Initiating call to customer (mock)';
-  }
-}
 
 // ===== PSAP =====
 function psap() {

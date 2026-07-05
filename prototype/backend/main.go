@@ -130,6 +130,11 @@ func main() {
 	mux.HandleFunc("/admin-8f2a4d", serveFile("admin.html"))
 	mux.HandleFunc("/register-page", serveFile("register.html"))
 
+	// PWA / static assets (referenced by enduser.html — were 404, breaking the service worker)
+	mux.HandleFunc("/manifest.json", staticFile("manifest.json", "application/manifest+json"))
+	mux.HandleFunc("/sw.js", staticFile("sw.js", "application/javascript"))
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
+
 	startProviderHealthLoop(context.Background())
 
 	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; cognitoStaff=%v; tenant=%s)",
@@ -185,6 +190,14 @@ func serveFile(name string) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
+		http.ServeFile(w, r, "/app/web/"+name)
+	}
+}
+
+// staticFile serves a fixed file from the web dir with an explicit content type.
+func staticFile(name, contentType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentType)
 		http.ServeFile(w, r, "/app/web/"+name)
 	}
 }

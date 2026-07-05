@@ -188,6 +188,50 @@ On the very first run, V0b confirmed the `.hidden` fix was deployed. V0c confirm
 
 ---
 
+### Lesson 16: A CRITICAL production defect can hide from curl-only QA
+
+**What happened:** The **operator console was 100% broken in every browser** — a JavaScript `SyntaxError: Unexpected token '}'` (orphaned dead code after `submitTriage()`, extra `}`) prevented the entire inline `<script>` from parsing, so every handler (`alogin`, `incoming`, `submitTriage`, `psap`, `alogout`, `dispatch`) was `undefined`. An operator could not log in, see the queue, dispatch a tow, or log out. This shipped in commit `596bd77` and survived many QA cycles.
+
+**Why it was missed:** All prior operator QA used `curl`/API calls, which never load or execute the page's JavaScript. The backend APIs all returned 200, so curl-based tests were green while the UI was dead. GitHub #66.
+
+**The fix / prevention:**
+- Run a **headless browser smoke test on EVERY surface** (not just end-user) asserting `page.on('pageerror')` is empty.
+- Add **static JS parsing to CI**: extract inline `<script>` blocks and run `node --check` / ESLint — fail the build on any SyntaxError.
+
+**Rule:** API-green ≠ app-works. If a human uses it in a browser, a browser test must execute its JavaScript.
+
+---
+
+### Lesson 17: Kebab-case `data-*` vs camelCase element ids silently breaks tabs
+
+**What happened:** Admin "Rate Limits" and "API Access" tabs rendered **blank**. The handler did `el(b.dataset.view + 'View').classList.remove('hidden')`; `data-view="rate-limits"` looked up `#rate-limitsView` but the div was `#rateLimitsView` → `el()` null → `TypeError: Cannot read properties of null`. All views hidden, none shown. GitHub #67.
+
+**Prevention:** Keep `data-view` values identical to id fragments, or normalize kebab→camel; null-guard before `.classList`. A headless test asserting "exactly one view visible after each tab click" catches this.
+
+**Rule:** Any string used to look up an element must be contract-tested against the actual id.
+
+---
+
+### Lesson 18: Referenced static assets must be routed (PWA 404s)
+
+**What happened:** `enduser.html` references `/manifest.json` and registers `/sw.js`, but the Go router serves neither → 404 on both hosts, service worker never registers, manifest parse error, console errors every load. Files existed in `web/` but had no route. GitHub #68.
+
+**Prevention:** A console-error / network-404 assertion in the headless smoke test fails when any referenced asset 404s.
+
+**Rule:** Every `href`/`src`/`register()` target must have a route + a test that fetches it.
+
+---
+
+### Lesson 19: Tests must target the right control and respect rate limits
+
+**What happened:** (a) `clickByText('Log in')` matched the top-nav *tab* button (`showTab`) instead of the form submit (`login()`), producing false CRITICAL failures for login/cases/incident. (b) Repeated headless runs tripped the app's own per-endpoint **rate limits (429)**, causing a flaky false "tracking card missing".
+
+**Prevention:** Add `data-testid` to interactive elements and click by that (not visible text). Design tests to be rate-limit aware (space requests, distinct IPs, or a test-exempt CIDR).
+
+**Rule:** A false positive from a bad selector wastes as much time as a real bug — make selectors unambiguous and tests hermetic.
+
+---
+
 ## SUMMARY
 
 | # | Lesson | Category |
@@ -207,6 +251,12 @@ On the very first run, V0b confirmed the `.hidden` fix was deployed. V0c confirm
 | 13 | crane append doesn't set ENTRYPOINT | Technical |
 | 14 | Optional volumes still block pod creation | Technical |
 | 15 | Node-specific failures go undetected | Technical |
+| 16 | CRITICAL front-end defect hidden from curl-only QA (operator console SyntaxError) | QA |
+| 17 | Kebab `data-*` vs camelCase id silently breaks tabs | Technical |
+| 18 | Referenced static assets (manifest/sw/favicon) must be routed | Technical |
+| 19 | Tests must target the right control + respect rate limits | QA |
+
+See also **`QA_TEST_STRATEGY.md`** for the full set of industry-standard test methods (static analysis of page scripts, per-surface headless smoke with zero-JS-error assertion, persona E2E, axe-core a11y, responsive/visual regression, link checking, API contract tests) that CI must adopt.
 
 ---
 

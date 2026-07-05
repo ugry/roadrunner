@@ -50,8 +50,8 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
   <div class="nav">
     <button class="nav-btn active" data-view="stats">Stats</button>
     <button class="nav-btn" data-view="operators">Operators</button>
-    <button class="nav-btn" data-view="rate-limits">Rate Limits</button>
-    <button class="nav-btn" data-view="api-access">API Access</button>
+    <button class="nav-btn" data-view="rateLimits">Rate Limits</button>
+    <button class="nav-btn" data-view="apiAccess">API Access</button>
   </div>
 </div>
 
@@ -133,10 +133,10 @@ document.querySelectorAll('.nav-btn').forEach(function(b){b.addEventListener('cl
   document.querySelectorAll('.nav-btn').forEach(function(x){x.classList.remove('active');});
   b.classList.add('active');
   document.querySelectorAll('#statsView,#operatorsView,#rateLimitsView,#apiAccessView').forEach(function(x){x.classList.add('hidden');});
-  el(b.dataset.view+'View').classList.remove('hidden');
+  var target=el(b.dataset.view+'View'); if(target)target.classList.remove('hidden');
   if(b.dataset.view==='operators')loadOperators();
-  if(b.dataset.view==='rate-limits')loadRateLimits();
-  if(b.dataset.view==='api-access')loadEndpoints();
+  if(b.dataset.view==='rateLimits')loadRateLimits();
+  if(b.dataset.view==='apiAccess')loadEndpoints();
 });});
 
 function loadStats(){api('/api/admin/stats').then(function(r){if(r.ok){var d=r.body;el('s_customers').textContent=d.total_customers;el('s_staff').textContent=d.total_staff;el('s_cases').textContent=d.active_cases;el('s_missions').textContent=d.total_missions;}});}
