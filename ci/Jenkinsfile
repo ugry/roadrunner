@@ -48,7 +48,7 @@ spec:
   stages {
     stage('Checkout') {
       steps {
-        cleanWs()
+        deleteDir()
         checkout scm
         script {
           sh 'git fetch --force --tags origin'
