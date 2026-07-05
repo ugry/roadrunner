@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Insucar — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f1117;--surface:#1a1d27;--surface2:#22252f;--fg:#e8eaed;--fg2:#b0b5c0;--muted:#6b7280;--accent:#60a5fa;--danger:#f87171;--success:#34d399;--warn:#fbbf24;--border:#2a2d37;--radius:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh}
+.top{display:flex;align-items:center;gap:16px;padding:14px 24px;background:var(--surface);border-bottom:1px solid var(--border)}
+.top h1{font-size:18px;font-weight:700;letter-spacing:-.01em}.top h1 span{color:var(--accent)}
+.top .nav{display:flex;gap:8px;margin-left:auto}
+.nav-btn{padding:8px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--fg2);cursor:pointer;font:inherit;font-size:13px;font-weight:600;transition:all .15s}
+.nav-btn:hover{border-color:var(--accent);color:var(--fg)}
+.nav-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px 24px}
+.stat{padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center}
+.stat .v{font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-.02em}
+.stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.main{padding:0 24px 24px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;overflow:hidden}
+.panel-h{padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.panel-b{padding:18px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+tr:hover{background:var(--surface2)}
+input,select{width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font:inherit;font-size:13px}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.btn{padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font:inherit;font-size:13px;font-weight:600}
+.btn-primary{background:var(--accent);color:#000}.btn-primary:hover{filter:brightness(1.1)}
+.btn-danger{background:var(--danger);color:#000}.btn-danger:hover{filter:brightness(1.1)}
+.btn-ghost{background:var(--surface2);color:var(--fg2);border:1px solid var(--border)}
+.form-row{display:flex;gap:10px;margin-bottom:12px}.form-row>div{flex:1}
+.form-row label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
+.status-on{color:var(--success);font-weight:700}.status-off{color:var(--danger);font-weight:700}
+.badge{padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-active{background:rgba(52,211,153,.15);color:var(--success)}
+.badge-inactive{background:rgba(248,113,113,.15);color:var(--danger)}
+#msg{padding:10px;font-size:12px;margin-bottom:12px;border-radius:6px;display:none}
+#msg.ok{display:block;background:rgba(52,211,153,.1);color:var(--success);border:1px solid rgba(52,211,153,.3)}
+#msg.err{display:block;background:rgba(248,113,113,.1);color:var(--danger);border:1px solid rgba(248,113,113,.3)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Insu<span>car</span> Admin</h1>
+  <div class="nav">
+    <button class="nav-btn active" data-view="stats">Stats</button>
+    <button class="nav-btn" data-view="operators">Operators</button>
+    <button class="nav-btn" data-view="rate-limits">Rate Limits</button>
+    <button class="nav-btn" data-view="api-access">API Access</button>
+  </div>
+</div>
+
+<div id="msg"></div>
+
+<div id="statsView"><div class="stats" id="statsGrid">
+  <div class="stat"><div class="v" id="s_customers">—</div><div class="l">Customers</div></div>
+  <div class="stat"><div class="v" id="s_staff">—</div><div class="l">Operators</div></div>
+  <div class="stat"><div class="v" id="s_cases">—</div><div class="l">Active Cases</div></div>
+  <div class="stat"><div class="v" id="s_missions">—</div><div class="l">Missions</div></div>
+</div></div>
+
+<div id="operatorsView" class="main hidden">
+  <div class="panel">
+    <div class="panel-h"><span>Create Operator</span></div>
+    <div class="panel-b">
+      <div class="form-row">
+        <div><label>Email</label><input id="op_email" placeholder="operator@insucar.demo"></div>
+        <div><label>Display Name</label><input id="op_name" placeholder="New Operator"></div>
+      </div>
+      <div class="form-row">
+        <div><label>Agent ID</label><input id="op_agent" placeholder="OP-2001"></div>
+        <div><label>Password</label><input id="op_pass" type="password" placeholder="Min 8 chars"></div>
+      </div>
+      <button class="btn btn-primary" onclick="createOperator()">+ Create Operator</button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><span>Active Operators</span><span class="badge badge-active" id="opCount">—</span></div>
+    <div class="panel-b" style="padding:0">
+      <table><thead><tr><th>Name</th><th>Email</th><th>Agent ID</th><th>Status</th><th>Cognito</th><th></th></tr></thead>
+        <tbody id="opTable"><tr><td colspan="6" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="rateLimitsView" class="main hidden">
+  <div class="panel">
+    <div class="panel-h"><span>Rate Limit Configuration</span></div>
+    <div class="panel-b" style="padding:0">
+      <table><thead><tr><th>Endpoint</th><th>RPM</th><th>Burst</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rlTable"><tr><td colspan="5" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><span>Add Rate Limit</span></div>
+    <div class="panel-b">
+      <div class="form-row">
+        <div><label>Endpoint</label><input id="rl_ep" placeholder="/api/user/incident"></div>
+        <div><label>RPM</label><input id="rl_rpm" type="number" value="30" min="1" max="1000"></div>
+        <div><label>Burst</label><input id="rl_burst" type="number" value="15" min="1" max="100"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addRateLimit()">Save Rate Limit</button>
+    </div>
+  </div>
+</div>
+
+<div id="apiAccessView" class="main hidden">
+  <div class="panel">
+    <div class="panel-h"><span>API Endpoint Access</span></div>
+    <div class="panel-b" style="padding:0">
+      <table><thead><tr><th>Endpoint</th><th>Methods</th><th>Min Role</th><th>Status</th><th></th></tr></thead>
+        <tbody id="epTable"><tr><td colspan="5" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+var ag='';try{ag=JSON.parse(localStorage.getItem('cognito_tokens')||'{}').access_token||'';}catch(_){}
+function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});if(ag)o.headers['Authorization']='Bearer '+ag;else o.credentials='include';return fetch(p,o).then(r=>r.json().then(b=>({ok:r.ok,status:r.status,body:b})).catch(()=>({ok:r.ok,status:r.status,body:{}})));}
+function showMsg(t,c){var e=document.getElementById('msg');e.textContent=t;e.className=c;setTimeout(function(){e.className=''},4000);}
+function v(id){return document.getElementById(id).value;}
+function el(id){return document.getElementById(id);}
+
+document.querySelectorAll('.nav-btn').forEach(function(b){b.addEventListener('click',function(){
+  document.querySelectorAll('.nav-btn').forEach(function(x){x.classList.remove('active');});
+  b.classList.add('active');
+  document.querySelectorAll('#statsView,#operatorsView,#rateLimitsView,#apiAccessView').forEach(function(x){x.classList.add('hidden');});
+  el(b.dataset.view+'View').classList.remove('hidden');
+  if(b.dataset.view==='operators')loadOperators();
+  if(b.dataset.view==='rate-limits')loadRateLimits();
+  if(b.dataset.view==='api-access')loadEndpoints();
+});});
+
+function loadStats(){api('/api/admin/stats').then(function(r){if(r.ok){var d=r.body;el('s_customers').textContent=d.total_customers;el('s_staff').textContent=d.total_staff;el('s_cases').textContent=d.active_cases;el('s_missions').textContent=d.total_missions;}});}
+
+async function loadOperators(){var r=await api('/api/admin/operators');if(!r.ok)return;var ops=r.body.operators||[];el('opCount').textContent=ops.filter(function(o){return o.active;}).length+'/'+ops.length;
+  var h='';ops.forEach(function(o){h+='<tr><td>'+o.display_name+'</td><td>'+o.email+'</td><td>'+o.agent_id+'</td><td><span class="'+(o.active?'status-on':'status-off')+'">'+(o.active?'Active':'Inactive')+'</span></td><td>'+(o.has_cognito?'✅':'—')+'</td><td>'+ (o.active?'<button class="btn btn-danger" style="padding:4px 12px;font-size:11px" onclick="deleteOperator(\''+o.id+'\')">Deactivate</button>':'')+'</td></tr>';});
+  el('opTable').innerHTML=h||'<tr><td colspan="6" style="color:var(--muted);text-align:center">No operators</td></tr>';}
+
+async function createOperator(){var r=await api('/api/admin/operators',{method:'POST',body:JSON.stringify({email:v('op_email'),display_name:v('op_name'),agent_id:v('op_agent'),password:v('op_pass')})});
+  if(r.ok){showMsg('Operator created: '+r.body.id,'ok');loadOperators();}else{showMsg('Error: '+(r.body.error||'unknown'),'err');}}
+
+async function deleteOperator(id){if(!confirm('Deactivate this operator?'))return;var r=await api('/api/admin/operators?id='+id,{method:'DELETE'});if(r.ok){showMsg('Operator deactivated','ok');loadOperators();}}
+
+async function loadRateLimits(){var r=await api('/api/admin/rate-limits');if(!r.ok)return;var rls=r.body.rate_limits||[];var h='';rls.forEach(function(rl){h+='<tr><td>'+rl.endpoint+'</td><td>'+rl.rpm+'</td><td>'+rl.burst+'</td><td><span class="'+(rl.enabled?'status-on':'status-off')+'">'+(rl.enabled?'Enabled':'Disabled')+'</span></td><td><button class="btn btn-ghost" style="padding:4px 12px;font-size:11px" onclick="toggleRateLimit(\''+rl.endpoint+'\','+!rl.enabled+')">'+(rl.enabled?'Disable':'Enable')+'</button></td></tr>';});
+  el('rlTable').innerHTML=h||'<tr><td colspan="5" style="color:var(--muted);text-align:center">No rate limits defined</td></tr>';}
+
+async function addRateLimit(){var r=await api('/api/admin/rate-limits',{method:'PUT',body:JSON.stringify({endpoint:v('rl_ep'),rpm:parseInt(v('rl_rpm')),burst:parseInt(v('rl_burst')),enabled:true})});if(r.ok){showMsg('Rate limit saved','ok');loadRateLimits();}}
+
+async function toggleRateLimit(ep,enabled){var r=await api('/api/admin/rate-limits',{method:'PUT',body:JSON.stringify({endpoint:ep,enabled:enabled})});if(r.ok)loadRateLimits();}
+
+async function loadEndpoints(){var r=await api('/api/admin/api-access');if(!r.ok)return;var eps=r.body.endpoints||[];var h='';eps.forEach(function(ep){h+='<tr><td>'+ep.endpoint+'</td><td>'+ep.methods+'</td><td>'+ep.min_role+'</td><td><span class="'+(ep.is_active?'status-on':'status-off')+'">'+(ep.is_active?'Active':'Inactive')+'</span></td><td><button class="btn btn-ghost" style="padding:4px 12px;font-size:11px" onclick="toggleEndpoint(\''+ep.endpoint+'\',\''+(ep.is_active?'false':'true')+'\')">'+(ep.is_active?'Disable':'Enable')+'</button></td></tr>';});
+  el('epTable').innerHTML=h||'<tr><td colspan="5" style="color:var(--muted);text-align:center">No endpoints defined</td></tr>';}
+
+async function toggleEndpoint(ep,active){await api('/api/admin/api-access',{method:'PUT',body:JSON.stringify({endpoint:ep,is_active:active==='true'})});loadEndpoints();}
+
+loadStats();
+setInterval(loadStats,30000);
+</script>
+</body></html>

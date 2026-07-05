@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Insucar — Create Your Account</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--brand:#0a7d5a;--brand-d:#086a4d;--navy:#0b1f2a;--amber:#f5a623;--bg:#f4f8f6;--surface:#fff;--line:#e3ece8;--muted:#5b7183;--fg:#0b1f2a;--radius:16px;--font:Inter,system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;font-family:var(--font);color:var(--fg);background:radial-gradient(1100px 560px at 82% -12%,rgba(10,125,90,.10),transparent 60%),var(--bg);min-height:100vh}
+.top{display:flex;align-items:center;gap:12px;padding:16px 26px;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .logo{font-size:20px;font-weight:800;letter-spacing:-.02em}.top .logo span{color:var(--brand)}
+.top a{margin-left:auto;color:var(--brand);font-weight:600;font-size:14px;text-decoration:none}
+.wrap{max-width:520px;margin:34px auto;padding:0 16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 20px 60px rgba(11,31,42,.08);overflow:hidden}
+.card-h{padding:16px 22px;border-bottom:1px solid var(--line);font-size:22px;font-weight:800;letter-spacing:-.01em}
+.card-b{padding:22px}
+.sub{color:var(--muted);font-size:14px;margin-bottom:16px;line-height:1.5}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;color:var(--fg);background:#fbfdfc}
+input:focus,select:focus{outline:2px solid var(--brand);outline-offset:2px;border-color:var(--brand);box-shadow:0 0 0 3px rgba(10,125,90,.15)}
+.row{display:flex;gap:12px}.row>div{flex:1}
+.btn{border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-top:14px}
+.btn-primary{background:var(--brand);color:#fff}.btn-primary:hover{background:var(--brand-d)}
+.check-row{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:13px}.check-row input[type=checkbox]{width:auto;accent-color:var(--brand)}
+#out{margin-top:10px;font-size:13px;text-align:center}
+.success{text-align:center;padding:30px 20px}.success h2{color:var(--brand);margin-bottom:8px}
+.success .check{font-size:48px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="logo">Insu<span>car</span></div>
+  <a href="/app">Already have an account? Log in →</a>
+</div>
+
+<div class="wrap">
+  <div class="card" id="formCard">
+    <div class="card-h">Create Your Account</div>
+    <div class="card-b">
+      <div class="sub">Register to get 24/7 roadside assistance. We already know your location and vehicle when you break down — so you don't have to type anything in an emergency.</div>
+
+      <div class="row"><div><label>First name *</label><input id="r_first" placeholder="Your first name"></div><div><label>Last name *</label><input id="r_last" placeholder="Your last name"></div></div>
+
+      <label>Email address *</label><input id="r_email" type="email" placeholder="you@example.com">
+
+      <div class="row">
+        <div><label>Country *</label><select id="r_country"><option>FR</option><option>GB</option><option>DE</option><option>ES</option><option>IT</option><option>NL</option><option>BE</option><option>CH</option><option>Other</option></select></div>
+        <div><label>Mobile phone (E.164) *</label><input id="r_phone" placeholder="+33600000000"></div>
+      </div>
+
+      <div class="row">
+        <div><label>Password *</label><input id="r_pass" type="password" placeholder="Minimum 8 characters"></div>
+        <div><label>Confirm password</label><input id="r_pass2" type="password" placeholder="Re-enter password"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="check-row"><input type="checkbox" id="c_terms" checked><label for="c_terms" style="margin:0;font-weight:400">I agree to the <a href="#" style="color:var(--brand)">Terms of Service</a> and <a href="#" style="color:var(--brand)">Privacy Policy</a></label></div>
+        <div class="check-row"><input type="checkbox" id="c_marketing"><label for="c_marketing" style="margin:0;font-weight:400">Send me service updates and safety tips (optional)</label></div>
+      </div>
+
+      <button class="btn btn-primary" onclick="register()">Create account &amp; start using Insucar</button>
+      <div id="out"></div>
+    </div>
+  </div>
+
+  <div id="successCard" class="card hidden">
+    <div class="card-b success">
+      <div class="check">✅</div>
+      <h2>Account created!</h2>
+      <p style="color:var(--muted)">Welcome to Insucar, <b id="s_name">—</b>.</p>
+      <p style="color:var(--muted);font-size:14px">You can now request roadside assistance with one tap. Your vehicle and location will be pre-filled.</p>
+      <a href="/app" class="btn btn-primary" style="display:inline-block;text-decoration:none;width:auto;padding:14px 40px;margin-top:24px">Go to Dashboard →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+async function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});o.credentials='include';var r=await fetch(p,o);return{ok:r.ok,status:r.status,body:await r.json().catch(function(){return{};})};}
+function v(id){return document.getElementById(id).value;}
+function el(id){return document.getElementById(id);}
+
+async function register(){
+  var first=v('r_first').trim(),last=v('r_last').trim(),email=v('r_email').trim();
+  var phone=v('r_phone').trim(),pass=v('r_pass'),pass2=v('r_pass2');
+  var country=v('r_country');
+
+  if(!first||!last){el('out').innerHTML='<span style="color:#c0392b">Please enter your name.</span>';return;}
+  if(!email||!email.includes('@')){el('out').innerHTML='<span style="color:#c0392b">Please enter a valid email address.</span>';return;}
+  if(!phone||!phone.startsWith('+')){el('out').innerHTML='<span style="color:#c0392b">Phone must be in E.164 format (e.g., +33600000000).</span>';return;}
+  if(!pass||pass.length<8){el('out').innerHTML='<span style="color:#c0392b">Password must be at least 8 characters.</span>';return;}
+  if(pass!==pass2){el('out').innerHTML='<span style="color:#c0392b">Passwords do not match.</span>';return;}
+  if(!el('c_terms').checked){el('out').innerHTML='<span style="color:#c0392b">You must agree to the Terms of Service.</span>';return;}
+
+  el('out').innerHTML='<span style="color:var(--muted)">Creating your account…</span>';
+  var consents=['terms','privacy'];
+  if(el('c_marketing').checked)consents.push('marketing');
+
+  var r=await api('/api/register',{method:'POST',body:JSON.stringify({
+    first:first,last:last,email:email,country:country,phone:phone,password:pass,consents:consents
+  })});
+
+  if(r.ok){
+    document.getElementById('s_name').textContent=first+' '+last;
+    el('formCard').classList.add('hidden');
+    el('successCard').classList.remove('hidden');
+  }else{
+    var err=r.body.error||'Registration failed.';
+    if(err.includes('duplicate')||err.includes('unique'))err='An account with this email already exists. <a href="/app" style="color:var(--brand)">Log in instead</a>.';
+    el('out').innerHTML='<span style="color:#c0392b">'+err+'</span>';
+  }
+}
+</script>
+</body></html>

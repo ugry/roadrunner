@@ -250,8 +250,41 @@ async function submitIncident() {
                lat: sessionStorage.getItem('gps_lat') || '', lng: sessionStorage.getItem('gps_lng') || '',
                photo_id: photoId };
   var r = await api('/api/user/incident', { method: 'POST', body: JSON.stringify(body) });
-  if (r.ok) { showBanner('✅ Case '+r.body.case_number+' — tracking live below','success'); loadCases(); el('i_type').value='breakdown';el('i_desc').value='';el('i_addr').value='';nextWiz(1); setTimeout(function(){el('cases').scrollIntoView({behavior:'smooth'});},500); }
+  if (r.ok) { showBanner('✅ Case '+r.body.case_number+' — tracking live below','success'); showPostSubmitTracking(r.body.case_number); loadCases(); }
   else showBanner('⚠ '+(r.body.error||'Request failed'),'error');
+}
+
+// P0-X1: Post-submission tracking view
+function showPostSubmitTracking(caseNumber) {
+  var dash = el('dash');
+  dash.insertAdjacentHTML('afterbegin', '<div class="card" id="trackingCard" style="text-align:center;margin-bottom:14px">'+
+    '<div class="card-b" style="padding:28px 20px">'+
+    '<div style="font-size:40px;margin-bottom:6px">🔍</div>'+
+    '<h2 style="margin:0 0 4px">Help is on the way</h2>'+
+    '<p style="color:var(--muted);font-size:13px">Case <b>'+caseNumber+'</b> — Finding your provider…</p>'+
+    '<div id="trackEta" style="font-size:38px;font-weight:800;color:var(--brand);margin:14px 0;letter-spacing:-.03em">—</div>'+
+    '<div id="trackDriver" style="font-size:14px;color:var(--muted);margin-bottom:14px">Searching for nearest available provider…</div>'+
+    '<a id="trackLink" href="#" target="_blank" class="btn btn-primary" style="display:none;width:auto;padding:10px 24px;text-decoration:none;font-size:14px">🗺 Track on live map</a>'+
+  '</div></div>');
+  pollTracking(caseNumber);
+}
+
+async function pollTracking(caseNumber) {
+  var r=await api('/api/user/cases');var cases=r.body.cases||[];var found=null;
+  for(var i=0;i<cases.length;i++){if(cases[i].case_number===caseNumber){found=cases[i];break;}}
+  if(!found){setTimeout(function(){pollTracking(caseNumber);},10000);return;}
+  if(found.status==='dispatched'||found.status==='en_route'||found.status==='on_site'){
+    var detail=await api('/api/agent/case?id='+found.id);
+    if(detail.ok&&detail.body.mission&&detail.body.mission.provider){
+      var m=detail.body.mission;var eta=m.eta_minutes||'—';
+      el('trackEta').textContent=eta+' min';
+      el('trackDriver').textContent=(m.provider||'')+(m.driver&&m.driver.name?' · '+m.driver.name:'')+(m.driver&&m.driver.plate?' ('+m.driver.plate+')':'');
+      el('trackLink').style.display='inline-block';
+      el('trackLink').href='/api/status/'+encodeURIComponent(caseNumber);
+    }
+  }
+  if(found.status!=='resolved'&&found.status!=='closed')setTimeout(function(){pollTracking(caseNumber);},10000);
+  else{el('trackEta').textContent='✅';el('trackDriver').textContent='Service completed';}
 }
 function getGPSLocation() {
   el('i_addr').placeholder = 'Getting location…';

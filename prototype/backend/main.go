@@ -97,6 +97,12 @@ func main() {
 	mux.HandleFunc("/api/agent/sms-journey", requireRole("agent", handleSmsJourney))
 	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
 	mux.HandleFunc("/api/case/arrived", requireRole("user", handleCaseArrived))
+
+	// admin — requires staff session with admin/product_owner group
+	mux.HandleFunc("/api/admin/rate-limits", requireRole("agent", handleAdminRateLimits))
+	mux.HandleFunc("/api/admin/api-access", requireRole("agent", handleAdminApiAccess))
+	mux.HandleFunc("/api/admin/operators", requireRole("agent", handleAdminOperators))
+	mux.HandleFunc("/api/admin/stats", requireRole("agent", handleAdminStats))
 	mux.HandleFunc("/api/agent/predict-eta", requireRole("agent", handlePredictEta))
 	mux.HandleFunc("/api/agent/safety-triage", requireRole("agent", handleSafetyTriage))
 
@@ -106,6 +112,8 @@ func main() {
 	// pages (host-based: op.* -> operators only, apex -> users only)
 	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc(opsPath, serveFile("operator.html"))
+	mux.HandleFunc("/admin-8f2a4d", serveFile("admin.html"))
+	mux.HandleFunc("/register-page", serveFile("register.html"))
 
 	startProviderHealthLoop(context.Background())
 
@@ -1064,6 +1072,152 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 		resp["lng"] = *lng
 	}
 	writeJSON(w, 200, resp)
+}
+
+// ===== ADMIN HANDLERS =====
+
+type rateLimitConfig struct {
+	Endpoint string `json:"endpoint"`
+	RPM      int    `json:"rpm"`       // requests per minute
+	Burst    int    `json:"burst"`     // max burst size
+	Enabled  bool   `json:"enabled"`
+}
+
+var rateLimits = map[string]rateLimitConfig{
+	"/api/register":                  {"/api/register", 10, 5, true},
+	"/api/user/login":                {"/api/user/login", 20, 10, true},
+	"/api/agent/login":               {"/api/agent/login", 20, 10, true},
+	"/api/telephony/mock/incoming":   {"/api/telephony/mock/incoming", 60, 30, true},
+	"/api/user/incident":             {"/api/user/incident", 30, 15, true},
+}
+
+func handleAdminRateLimits(w http.ResponseWriter, r *http.Request) {
+	c, _ := callerFrom(r)
+	if c == nil || c.Role != "agent" {
+		writeJSON(w, 403, map[string]string{"error": "admin only"})
+		return
+	}
+	switch r.Method {
+	case "GET":
+		endpoint := r.URL.Query().Get("endpoint")
+		if endpoint != "" {
+			if rl, ok := rateLimits[endpoint]; ok {
+				writeJSON(w, 200, rl)
+				return
+			}
+			writeJSON(w, 404, map[string]string{"error": "endpoint not found"})
+			return
+		}
+		all := make([]rateLimitConfig, 0, len(rateLimits))
+		for _, rl := range rateLimits {
+			all = append(all, rl)
+		}
+		writeJSON(w, 200, map[string]any{"rate_limits": all})
+	case "PUT":
+		var in rateLimitConfig
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.Endpoint == "" {
+			writeJSON(w, 400, map[string]string{"error": "endpoint required"})
+			return
+		}
+		rateLimits[in.Endpoint] = in
+		db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('admin.rate_limit.update',$1,$2)`,
+			c.ID, fmt.Sprintf(`{"endpoint":"%s","rpm":%d}`, in.Endpoint, in.RPM))
+		writeJSON(w, 200, in)
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func handleAdminApiAccess(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		rows, _ := db.Query(r.Context(), `
+			SELECT endpoint, methods, min_role, description, is_active
+			FROM api_endpoints ORDER BY endpoint`)
+		defer rows.Close()
+		var out []map[string]any
+		for rows.Next() {
+			var ep, methods, role, desc string
+			var active bool
+			rows.Scan(&ep, &methods, &role, &desc, &active)
+			out = append(out, map[string]any{
+				"endpoint": ep, "methods": methods, "min_role": role, "description": desc, "is_active": active,
+			})
+		}
+		writeJSON(w, 200, map[string]any{"endpoints": out})
+	case "PUT":
+		var in struct {
+			Endpoint string `json:"endpoint"`
+			IsActive bool   `json:"is_active"`
+			MinRole  string `json:"min_role"`
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		db.Exec(r.Context(), `UPDATE api_endpoints SET is_active=$1, min_role=$2 WHERE endpoint=$3`,
+			in.IsActive, in.MinRole, in.Endpoint)
+		writeJSON(w, 200, map[string]string{"status": "updated"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func handleAdminOperators(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		rows, _ := db.Query(r.Context(), `
+			SELECT id, email, display_name, agent_id, active, cognito_subject IS NOT NULL as has_cognito
+			FROM staff ORDER BY display_name`)
+		defer rows.Close()
+		var out []map[string]any
+		for rows.Next() {
+			var id, email, name, agent string
+			var active, hasCog bool
+			rows.Scan(&id, &email, &name, &agent, &active, &hasCog)
+			out = append(out, map[string]any{
+				"id": id, "email": email, "display_name": name,
+				"agent_id": agent, "active": active, "has_cognito": hasCog,
+			})
+		}
+		writeJSON(w, 200, map[string]any{"operators": out})
+	case "POST":
+		var in struct {
+			Email       string `json:"email"`
+			DisplayName string `json:"display_name"`
+			AgentID     string `json:"agent_id"`
+			Password    string `json:"password"`
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		var id string
+		err := db.QueryRow(r.Context(),
+			`INSERT INTO staff(email,display_name,agent_id,password_hash,active) VALUES($1,$2,$3,$4,true) RETURNING id`,
+			in.Email, in.DisplayName, in.AgentID, sha256hex(in.Password)).Scan(&id)
+		if err != nil {
+			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 201, map[string]any{"id": id, "status": "created"})
+	case "DELETE":
+		id := r.URL.Query().Get("id")
+		db.Exec(r.Context(), `UPDATE staff SET active=false WHERE id=$1`, id)
+		writeJSON(w, 200, map[string]string{"status": "deactivated"})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func handleAdminStats(w http.ResponseWriter, r *http.Request) {
+	var totalCustomers, totalStaff, activeCases, totalMissions int
+	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM customers`).Scan(&totalCustomers)
+	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM staff`).Scan(&totalStaff)
+	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM cases WHERE status NOT IN ('closed','resolved','cancelled')`).Scan(&activeCases)
+	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM missions`).Scan(&totalMissions)
+	writeJSON(w, 200, map[string]any{
+		"total_customers": totalCustomers,
+		"total_staff":     totalStaff,
+		"active_cases":    activeCases,
+		"total_missions":  totalMissions,
+		"rate_limits":     len(rateLimits),
+	})
 }
 
 func nz(v, d string) string {
