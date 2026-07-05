@@ -50,7 +50,6 @@ spec:
       steps {
         checkout scm
         script {
-          sh 'git fetch --force --tags origin'
           env.GIT_SHA    = sh(script: "git rev-parse --short=12 HEAD", returnStdout: true).trim()
           env.GIT_AUTHOR = sh(script: "git log -1 --pretty=format:'%an' | tr -d '\"\\\\'", returnStdout: true).trim()
         }
