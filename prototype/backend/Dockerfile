@@ -11,3 +11,5 @@ COPY --from=build /out/insucar-api /app/insucar-api
 COPY web /app/web
 EXPOSE 8080
 ENTRYPOINT ["/app/insucar-api"]
+
+# build cache bust: force fresh build with connector.go
