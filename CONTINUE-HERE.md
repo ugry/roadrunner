@@ -45,18 +45,19 @@ Last updated: 2026-07-05 (rich operator console deployed)
   * https://unysolar.com/  (+www) -> premium marketing landing (OD "stripe", golden-ratio); logo shield.
   * https://unysolar.com/app       -> functional user app: login/register -> request assistance -> my cases.
   * https://op.unysolar.com/        -> operator console: agent login -> live queue -> screen-pop -> dispatch.
-- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:12 (Jenkins build 12, rich operator console).
+- Everything runs on EKS in ns `insucar`; current image tag: insucar-api:13 (Jenkins build 13, multi-tenant + rich console).
 - Auth (demo): users by EMAIL, agents by AGENT_ID (HMAC cookie sessions). Creds in access.md.
   Users: claire.martin@example.fr / Claire#2026 (+john,+lukas). Agents: OP-1001/Operator#2026 (+SUP-2001,PO-3001).
-- Backend: single Go service prototype/backend/main.go; endpoints /api/user/*, /api/agent/*,
-  /api/register, /api/telephony/mock/incoming. Host-based routing (op.* vs apex) in handleRoot.
+- Backend: Go service prototype/backend/ (main.go + tenant.go + events.go + cache.go + cognito.go).
+   Endpoints /api/user/*, /api/agent/* (added /providers, /stats, /status), /api/register, /api/telephony/mock/incoming.
+   Host-based routing (op.* vs apex) in handleRoot.
 - Mock Amazon Connect; REAL provider connector (provider-axa svc); REAL SMS via SNS.
 - TLS: ingress-nginx + cert-manager (ClusterIssuer letsencrypt-prod, cert insucar-tls). 80->443 redirect.
   insucar-api svc = ClusterIP; Route53 alias (unysolar/www/app/op) -> ingress ELB.
 - CI/CD on EKS PROVEN: git push -> Jenkins(Kaniko->ECR) -> Spinnaker webhook -> gated dev/UAT/prod.
 - Design + prompt: prompt/agenticpromptinsucar.md (v3 Redion-parity). Diagrams: prompt/*.svg|pdf,
   mermaidschemas/{current-deployed,planned-design}.svg. Terraform IaC: terraform/.
-- DB: db/schema.sql + seed.sql + schema-v3-additions(tenants/RLS) + schema-v4-auth + schema-v5-cognito(cognito_subject) + seed-users.
+- DB: db/schema.sql + seed.sql + schema-v3-additions(tenants/RLS) + schema-v4-auth + schema-v5-cognito + schema-v6-operator + seed-users + seed-tenant.
 - Brand: green #0a7d5a / navy #0b1f2a / amber #f5a623 / Inter. Logo: design/insucar-logo.svg + mark.
 - OLDER standalone prototype EC2 (i-0628af42823122bce) still exists (docker-compose) — superseded by EKS.
 
@@ -108,7 +109,10 @@ export PATH="$HOME/.local/bin:$PATH"
 ## NEXT STEPS (priority order) — updated 2026-07-05
 1. Replace demo auth with Amazon Cognito (customer/staff/partner user pools, MFA); wire the 3 apps to OIDC.
 2. ✅ DONE — Rich operator console (auto-refresh, SLA timers, provider fallback, coverage, triage, timeline)
-3. Multi-tenant in code: resolve tenant by host/JWT and SET app.current_tenant so RLS engages.
+3. ✅ DONE (basic) — Multi-tenant: host-based tenant resolution, auto-seed default tenant, RLS middleware.
+   ⚠️ KNOWN LIMITATION: SET LOCAL doesn't carry across pgxpool connections. RLS policies exist but don't
+   engage yet. Fix: refactor to acquire dedicated connection per request, or use BEGIN/SET/COMMIT wrapper.
+   See prototype/backend/tenant.go. Default tenant auto-seeded at startup.
 4. Real telephony: swap mock Connect for live Amazon Connect + Lex; Pinpoint SMS out of sandbox.
 5. Real provider connectors (AXA Roadside Missioning / Towpal) via the connector registry + webhooks.
 6. HA data: Amazon RDS Multi-AZ (managed failover); move to separate AWS accounts per tier.
