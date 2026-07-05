@@ -23,6 +23,7 @@ import (
 
 var cognito *cognitoVerifier        // primary (customer) pool verifier
 var cognitoStaff *cognitoVerifier   // staff pool verifier (when separate pools are used)
+var cognitoPartner *cognitoVerifier // partner pool verifier (when separate pools are used)
 
 type cognitoVerifier struct {
 	issuer    string
@@ -48,6 +49,14 @@ func newCognitoStaffVerifier() *cognitoVerifier {
 		return nil
 	}
 	return newVerifierFromIssuer(iss, os.Getenv("COGNITO_STAFF_CLIENT_IDS"))
+}
+
+func newCognitoPartnerVerifier() *cognitoVerifier {
+	iss := strings.TrimRight(os.Getenv("COGNITO_PARTNER_ISSUER"), "/")
+	if iss == "" {
+		return nil
+	}
+	return newVerifierFromIssuer(iss, os.Getenv("COGNITO_PARTNER_CLIENT_IDS"))
 }
 
 func newVerifierFromIssuer(issuer, clientIDsEnv string) *cognitoVerifier {
@@ -141,11 +150,22 @@ type cognitoIdentity struct {
 
 func (v *cognitoVerifier) verify(tokenStr string) (*cognitoIdentity, error) {
 	claims := jwt.MapClaims{}
-	if _, err := jwt.ParseWithClaims(tokenStr, claims, v.keyfunc,
+	parsed, err := jwt.ParseWithClaims(tokenStr, claims, v.keyfunc,
 		jwt.WithValidMethods([]string{"RS256"}),
 		jwt.WithIssuer(v.issuer),
-	); err != nil {
+		jwt.WithLeeway(30*time.Second),
+	)
+	if err != nil {
 		return nil, err
+	}
+	if !parsed.Valid {
+		return nil, errors.New("token invalid")
+	}
+	// Defense-in-depth: explicitly check exp even though the library does it.
+	if exp, ok := claims["exp"].(float64); ok {
+		if time.Unix(int64(exp), 0).Before(time.Now().Add(-30 * time.Second)) {
+			return nil, errors.New("token expired")
+		}
 	}
 	if tu, _ := claims["token_use"].(string); tu != "access" && tu != "id" {
 		return nil, errors.New("bad token_use")
@@ -179,8 +199,8 @@ func bearerIdentity(r *http.Request) (*cognitoIdentity, bool) {
 		return nil, false
 	}
 	tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
-	// Try primary (customer) verifier first, then staff verifier
-	for _, v := range []*cognitoVerifier{cognito, cognitoStaff} {
+	// Try all configured verifiers in order: customer, staff, partner
+	for _, v := range []*cognitoVerifier{cognito, cognitoStaff, cognitoPartner} {
 		if v == nil {
 			continue
 		}

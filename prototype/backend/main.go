@@ -14,12 +14,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
@@ -71,6 +73,12 @@ func main() {
 			log.Printf("cognito staff jwks prefetch failed (will retry lazily): %v", err)
 		}
 	}
+	cognitoPartner = newCognitoPartnerVerifier()
+	if cognitoPartner != nil {
+		if err := cognitoPartner.refresh(context.Background()); err != nil {
+			log.Printf("cognito partner jwks prefetch failed (will retry lazily): %v", err)
+		}
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealth)
@@ -83,24 +91,25 @@ func main() {
 
 	// public
 	mux.HandleFunc("/api/register", handleRegister)
-	mux.HandleFunc("/api/upload/photo", handlePhotoUpload)
+	mux.HandleFunc("/api/upload/photo", requireRole("user", handlePhotoUpload))
 	mux.HandleFunc("/api/photo/", handlePhotoServe)
-	mux.HandleFunc("/api/telephony/mock/incoming", handleMockIncoming)
+	mux.HandleFunc("/api/telephony/mock/incoming", requireRole("agent", handleMockIncoming))
 	mux.HandleFunc("/api/status/", handleStatusPage)
 	mux.HandleFunc("/status/", handleStatusPage) // customer SMS tracking links (STATUS_LINK_BASE)
-	mux.HandleFunc("/api/telephony/mock/psap", handleMockPsap)
-	mux.HandleFunc("/api/telephony/mock/call-state", handleMockCallState)
+	mux.HandleFunc("/api/telephony/mock/psap", requireRole("agent", handleMockPsap))
+	mux.HandleFunc("/api/telephony/mock/call-state", requireRole("agent", handleMockCallState))
 	mux.HandleFunc("/api/webhook/provider", handleProviderWebhook)
-	mux.HandleFunc("/api/events", handleSSE)
-	mux.HandleFunc("/api/connect/events", handleConnectEvent)
-	mux.HandleFunc("/api/connect/lex", handleLexTriage)
-	mux.HandleFunc("/api/connect/psap", handlePsapTransfer)
+	mux.HandleFunc("/api/events", requireRole("agent", handleSSE))
+	mux.HandleFunc("/api/connect/events", requireRole("agent", handleConnectEvent))
+	mux.HandleFunc("/api/connect/lex", requireRole("agent", handleLexTriage))
+	mux.HandleFunc("/api/connect/psap", requireRole("agent", handlePsapTransfer))
 	mux.HandleFunc("/api/pinpoint/callback", handlePinpointCallback)
 	mux.HandleFunc("/api/push/send", requireRole("agent", handlePushSend))
 
 	// user (customer) — requires user session
 	mux.HandleFunc("/api/user/incident", requireRole("user", handleUserIncident))
 	mux.HandleFunc("/api/user/cases", requireRole("user", handleUserCases))
+	mux.HandleFunc("/api/user/policies", requireRole("user", handleUserPolicies))
 
 	// agent (operator) — requires staff session
 	mux.HandleFunc("/api/agent/cases", requireRole("agent", handleAgentCases))
@@ -109,6 +118,7 @@ func main() {
 	mux.HandleFunc("/api/agent/dispatch", requireRole("agent", handleDispatch))
 	mux.HandleFunc("/api/agent/providers", requireRole("agent", handleAgentProviders))
 	mux.HandleFunc("/api/agent/stats", requireRole("agent", handleAgentStats))
+	mux.HandleFunc("/api/agent/status", requireRole("agent", handleAgentStatus))
 	mux.HandleFunc("/api/agent/sms-journey", requireRole("agent", handleSmsJourney))
 	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
 	mux.HandleFunc("/api/case/arrived", requireRole("user", handleCaseArrived))
@@ -118,6 +128,7 @@ func main() {
 	mux.HandleFunc("/api/admin/api-access", requireAdmin(handleAdminApiAccess))
 	mux.HandleFunc("/api/admin/operators", requireAdmin(handleAdminOperators))
 	mux.HandleFunc("/api/admin/stats", requireAdmin(handleAdminStats))
+	mux.HandleFunc("/api/admin/policies", requireAdmin(handleAdminPolicies))
 	mux.HandleFunc("/api/agent/predict-eta", requireRole("agent", handlePredictEta))
 	mux.HandleFunc("/api/agent/safety-triage", requireRole("agent", handleSafetyTriage))
 
@@ -137,9 +148,9 @@ func main() {
 
 	startProviderHealthLoop(context.Background())
 
-	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; cognitoStaff=%v; tenant=%s)",
-		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, cognitoStaff != nil, defaultTenantID[:min(8, len(defaultTenantID))])
-	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(logMW(rateLimitMW(mux)))))
+	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; cognitoStaff=%v; cognitoPartner=%v; tenant=%s)",
+		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, cognitoStaff != nil, cognitoPartner != nil, defaultTenantID[:min(8, len(defaultTenantID))])
+	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(slogLogMW(sanitizeMW(rateLimitMW(mux))))))
 }
 
 // ---------- infra helpers ----------
@@ -263,12 +274,14 @@ func requireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 
 func handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
-		"cognito":          cognito != nil,
-		"region":           getenv("AWS_REGION", "eu-west-1"),
-		"customerDomain":   getenv("COGNITO_CUSTOMER_DOMAIN", ""),
-		"customerClientId": getenv("COGNITO_CUSTOMER_CLIENT_ID", ""),
-		"staffDomain":      getenv("COGNITO_STAFF_DOMAIN", ""),
-		"staffClientId":    getenv("COGNITO_STAFF_CLIENT_ID", ""),
+		"cognito":           cognito != nil,
+		"region":            getenv("AWS_REGION", "eu-west-1"),
+		"customerDomain":    getenv("COGNITO_CUSTOMER_DOMAIN", ""),
+		"customerClientId":  getenv("COGNITO_CUSTOMER_CLIENT_ID", ""),
+		"staffDomain":       getenv("COGNITO_STAFF_DOMAIN", ""),
+		"staffClientId":     getenv("COGNITO_STAFF_CLIENT_ID", ""),
+		"partnerDomain":     getenv("COGNITO_PARTNER_DOMAIN", ""),
+		"partnerClientId":   getenv("COGNITO_PARTNER_CLIENT_ID", ""),
 	})
 }
 
@@ -321,7 +334,8 @@ func handleAgentLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: "insucar_session", Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: "insucar_session", Value: "", Path: "/",
+		MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	writeJSON(w, 200, map[string]string{"status": "logged_out"})
 }
 
@@ -1448,6 +1462,226 @@ func handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		"active_cases":    activeCases,
 		"total_missions":  totalMissions,
 		"rate_limits":     rlCount,
+	})
+}
+
+// ---------- policy handlers ----------
+
+// handleUserPolicies returns the authenticated user's policies with coverage details.
+func handleUserPolicies(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	c, _ := callerFrom(r)
+	rows, err := db.Query(r.Context(), `
+		SELECT p.id, p.policy_number, p.product::text, p.coverage::text, p.status::text,
+		       p.valid_from, p.valid_to, p.excess_amount, p.currency, p.callout_limit, p.callout_used,
+		       coalesce(v.license_plate,''), coalesce(v.make,''), coalesce(v.model,'')
+		FROM policies p
+		LEFT JOIN policy_vehicles pv ON pv.policy_id = p.id
+		LEFT JOIN vehicles v ON v.id = pv.vehicle_id
+		WHERE p.customer_id = $1
+		ORDER BY p.valid_to DESC`, c.ID)
+	if err != nil {
+		slog.Error("user_policies_query", "err", err, "customer_id", c.ID)
+		writeJSON(w, 500, map[string]string{"error": "could not load policies"})
+		return
+	}
+	defer rows.Close()
+	var out []map[string]any
+	for rows.Next() {
+		var id, polNo, prod, cov, stat, curr, plate, makeStr, model string
+		var vf, vt time.Time
+		var excess float64
+		var calloutLimit, calloutUsed *int
+		rows.Scan(&id, &polNo, &prod, &cov, &stat, &vf, &vt, &excess, &curr, &calloutLimit, &calloutUsed, &plate, &makeStr, &model)
+		out = append(out, map[string]any{
+			"id": id, "policy_number": polNo, "product": prod, "coverage": cov,
+			"status": stat, "valid_from": vf, "valid_to": vt,
+			"excess_amount": excess, "currency": curr,
+			"callout_limit": calloutLimit, "callout_used": calloutUsed,
+			"vehicle": map[string]any{"plate": plate, "make": makeStr, "model": model},
+		})
+	}
+	writeJSON(w, 200, map[string]any{"policies": out})
+}
+
+// handleAdminPolicies provides CRUD for policy management (admin only).
+func handleAdminPolicies(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		// List all policies with basic customer info
+		rows, err := db.Query(r.Context(), `
+			SELECT p.id, p.policy_number, p.product::text, p.coverage::text, p.status::text,
+			       c.first_name||' '||c.last_name, c.email, p.valid_from, p.valid_to, p.excess_amount
+			FROM policies p
+			JOIN customers c ON c.id = p.customer_id
+			ORDER BY p.valid_to DESC LIMIT 100`)
+		if err != nil {
+			slog.Error("admin_policies_list", "err", err)
+			writeJSON(w, 500, map[string]string{"error": "could not list policies"})
+			return
+		}
+		defer rows.Close()
+		var out []map[string]any
+		for rows.Next() {
+			var id, polNo, prod, cov, stat, name, email string
+			var vf, vt time.Time
+			var excess float64
+			rows.Scan(&id, &polNo, &prod, &cov, &stat, &name, &email, &vf, &vt, &excess)
+			out = append(out, map[string]any{
+				"id": id, "policy_number": polNo, "product": prod,
+				"coverage": cov, "status": stat, "customer": name,
+				"email": email, "valid_from": vf, "valid_to": vt, "excess": excess,
+			})
+		}
+		writeJSON(w, 200, map[string]any{"policies": out})
+
+	case "POST":
+		var in struct {
+			CustomerID    string  `json:"customer_id"`
+			Product       string  `json:"product"`
+			Coverage      string  `json:"coverage"`
+			ValidFrom     string  `json:"valid_from"`
+			ValidTo       string  `json:"valid_to"`
+			ExcessAmount  float64 `json:"excess_amount"`
+			Currency      string  `json:"currency"`
+			CalloutLimit  *int    `json:"callout_limit"`
+		}
+		if json.NewDecoder(r.Body).Decode(&in) != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad json"})
+			return
+		}
+		// Validate required fields
+		if in.CustomerID == "" || in.Product == "" || in.Coverage == "" || in.ValidFrom == "" || in.ValidTo == "" {
+			writeJSON(w, 400, map[string]string{"error": "customer_id, product, coverage, valid_from, and valid_to are required"})
+			return
+		}
+		if !sanitizePolicyInput(in.CustomerID, in.Product, in.Coverage) {
+			writeJSON(w, 400, map[string]string{"error": "invalid input characters"})
+			return
+		}
+		polNo := fmt.Sprintf("INS-%d", time.Now().UnixNano())
+		var id string
+		err := db.QueryRow(r.Context(),
+			`INSERT INTO policies(policy_number,customer_id,product,coverage,status,valid_from,valid_to,excess_amount,currency,callout_limit)
+			 VALUES($1,$2,$3,$4,'active',$5,$6,$7,coalesce($8,'EUR'),$9) RETURNING id`,
+			polNo, in.CustomerID, in.Product, in.Coverage, in.ValidFrom, in.ValidTo, in.ExcessAmount,
+			nz(in.Currency, "EUR"), in.CalloutLimit).Scan(&id)
+		if err != nil {
+			slog.Error("admin_policy_create", "err", err, "customer_id", in.CustomerID)
+			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			return
+		}
+		db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('policy.created','admin',$1)`,
+			fmt.Sprintf(`{"policy_id":"%s","policy_number":"%s","customer_id":"%s"}`, id, polNo, in.CustomerID))
+		writeJSON(w, 201, map[string]any{"id": id, "policy_number": polNo, "status": "created"})
+
+	case "PUT":
+		var in struct {
+			ID           string  `json:"id"`
+			Coverage     string  `json:"coverage"`
+			Status       string  `json:"status"`
+			ExcessAmount *float64 `json:"excess_amount"`
+			CalloutLimit *int    `json:"callout_limit"`
+		}
+		if json.NewDecoder(r.Body).Decode(&in) != nil || in.ID == "" {
+			writeJSON(w, 400, map[string]string{"error": "id required"})
+			return
+		}
+		if in.Coverage == "" && in.Status == "" && in.ExcessAmount == nil && in.CalloutLimit == nil {
+			writeJSON(w, 400, map[string]string{"error": "at least one field to update required"})
+			return
+		}
+		if in.Coverage != "" {
+			db.Exec(r.Context(), `UPDATE policies SET coverage=$1 WHERE id=$2`, in.Coverage, in.ID)
+		}
+		if in.Status != "" {
+			db.Exec(r.Context(), `UPDATE policies SET status=$1 WHERE id=$2`, in.Status, in.ID)
+		}
+		if in.ExcessAmount != nil {
+			db.Exec(r.Context(), `UPDATE policies SET excess_amount=$1 WHERE id=$2`, *in.ExcessAmount, in.ID)
+		}
+		if in.CalloutLimit != nil {
+			db.Exec(r.Context(), `UPDATE policies SET callout_limit=$1 WHERE id=$2`, *in.CalloutLimit, in.ID)
+		}
+		db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('policy.updated','admin',$1)`,
+			fmt.Sprintf(`{"policy_id":"%s"}`, in.ID))
+		writeJSON(w, 200, map[string]any{"id": in.ID, "status": "updated"})
+
+	case "DELETE":
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			writeJSON(w, 400, map[string]string{"error": "id required"})
+			return
+		}
+		db.Exec(r.Context(), `UPDATE policies SET status='cancelled' WHERE id=$1`, id)
+		db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('policy.cancelled','admin',$1)`,
+			fmt.Sprintf(`{"policy_id":"%s"}`, id))
+		writeJSON(w, 200, map[string]any{"id": id, "status": "cancelled"})
+
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
+// sanitizePolicyInput performs basic validation on string fields.
+func sanitizePolicyInput(fields ...string) bool {
+	for _, f := range fields {
+		if !utf8.ValidString(f) {
+			return false
+		}
+		if strings.Contains(f, "\x00") {
+			return false
+		}
+		if len(f) > 255 {
+			return false
+		}
+	}
+	return true
+}
+
+// ---------- structured logging (slog) ----------
+
+var appLogger *slog.Logger
+
+func init() {
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	appLogger = slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	slog.SetDefault(appLogger)
+}
+
+// slogLogMW replaces logMW with structured JSON logging.
+func slogLogMW(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("request", "method", r.Method, "path", r.URL.Path, "remote", clientIP(r))
+		h.ServeHTTP(w, r)
+	})
+}
+
+// ---------- input sanitization middleware ----------
+
+// sanitizeMW strips suspicious characters from URL paths and query strings.
+func sanitizeMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Reject requests with null bytes or suspicious path traversal
+		if strings.Contains(r.URL.Path, "\x00") || strings.Contains(r.URL.RawQuery, "\x00") {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		if strings.Contains(r.URL.Path, "..") && !strings.Contains(r.URL.Path, "/api/photo/") {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		// Enforce content type on mutation endpoints
+		if (r.Method == "POST" || r.Method == "PUT") && strings.HasPrefix(r.URL.Path, "/api/") {
+			ct := r.Header.Get("Content-Type")
+			if ct != "" && !strings.HasPrefix(ct, "application/json") && !strings.HasPrefix(ct, "multipart/form-data") {
+				slog.Warn("unexpected_content_type", "path", r.URL.Path, "content_type", ct)
+			}
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

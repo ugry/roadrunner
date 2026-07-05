@@ -364,6 +364,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; }
   .sla-strip { display: none; }
+  .topbar { gap: 8px; padding: 0 10px; }
+  .brand-sub { display: none; }
+  .btn { padding: 10px 12px; font-size: 13px; }
+  .svc-grid { grid-template-columns: 1fr 1fr; }
+  .svc { padding: 8px 10px; }
+  .screenpop { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+  #liveMap { height: 200px; }
+  .pop-name { font-size: 18px; }
+  .workspace { padding: 8px; gap: 8px; }
 }
 </style>
 </head>
@@ -696,7 +706,18 @@ function fmtAge(iso) {
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 // ===== AUTH =====
-async function alogin(){const r=await api('/api/agent/login',{method:'POST',body:JSON.stringify({agentID:v('a_id'),password:v('a_pass')})});if(r.ok)enter(r.body);else el('lerr').textContent='⚠ '+(r.body.error||'login failed');}
+async function alogin(){
+  var agentId = (v('a_id')||'').trim();
+  var pass = v('a_pass')||'';
+  if (!agentId) { el('lerr').textContent='⚠ Agent ID required'; return; }
+  if (!pass) { el('lerr').textContent='⚠ Password required'; return; }
+  if (pass.length < 4) { el('lerr').textContent='⚠ Password too short'; return; }
+  // Sanitize input
+  agentId = agentId.replace(/[<>]/g,'').slice(0,100);
+  const r=await api('/api/agent/login',{method:'POST',body:JSON.stringify({agentID:agentId,password:pass})});
+  if(r.ok) enter(r.body);
+  else el('lerr').textContent='⚠ '+(r.body.error||'Login failed. Check your credentials.');
+}
 async function alogout(){stopTimers();localStorage.removeItem('cognito_tokens');localStorage.removeItem('cognito_pkce');await api('/api/logout',{method:'POST'});location.reload();}
 
 function enter(me){

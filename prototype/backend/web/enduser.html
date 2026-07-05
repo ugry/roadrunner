@@ -149,11 +149,47 @@ function bearerApi(p, o) {
 function api(p,o){return bearerApi(p,o);}
 function v(id){return document.getElementById(id).value;}function el(id){return document.getElementById(id);}
 function showTab(t){el('tabLogin').classList.toggle('on',t=='login');el('tabReg').classList.toggle('on',t=='reg');el('login').classList.toggle('hidden',t!='login');el('reg').classList.toggle('hidden',t!='reg');}
-async function login(){const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:v('l_email'),password:v('l_pass')})});if(r.ok)enter(r.body);else el('out').textContent='⚠ '+(r.body.error||'login failed');}
+async function login(){
+  var email = (v('l_email')||'').trim();
+  var pass = v('l_pass')||'';
+  if (!email || email.indexOf('@') < 0) { el('out').textContent='⚠ Please enter a valid email'; return; }
+  if (!pass) { el('out').textContent='⚠ Password required'; return; }
+  email = email.replace(/[<>]/g,'').slice(0,254);
+  const r=await api('/api/user/login',{method:'POST',body:JSON.stringify({email:email,password:pass})});
+  if(r.ok) enter(r.body);
+  else el('out').textContent='⚠ ' + (r.body.error||'Login failed. Check your email and password.');
+}
 async function register(){
+  // Client-side validation
+  var errs = [];
+  var first = (v('r_first')||'').trim();
+  var last = (v('r_last')||'').trim();
+  var email = (v('r_email')||'').trim();
+  var phone = (v('r_phone')||'').trim();
+  var pass = v('r_pass')||'';
+  if (!first) errs.push('First name required');
+  if (!last) errs.push('Last name required');
+  if (!email || email.indexOf('@') < 0 || email.indexOf('.') < 0) errs.push('Valid email required');
+  if (!phone || !phone.startsWith('+')) errs.push('Phone must start with + and country code (e.g. +33...)');
+  if (pass.length < 8) errs.push('Password must be at least 8 characters');
+  if (errs.length) { el('out').textContent='⚠ ' + errs.join('. '); return; }
+
+  // Sanitize inputs before sending
+  first = first.replace(/[<>]/g,'').slice(0,100);
+  last = last.replace(/[<>]/g,'').slice(0,100);
+  email = email.replace(/[<>]/g,'').slice(0,254);
+  phone = phone.replace(/[^\d+]/g,'').slice(0,20);
+
   var country = v('r_country');
-  if (!country) country = v('r_country_other') || 'FR';
-  const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:v('r_first'),last:v('r_last'),email:v('r_email'),country:country,phone:v('r_phone'),password:v('r_pass'),consents:['terms','privacy']})});if(r.ok)enter({name:v('r_first')+' '+v('r_last')});else el('out').textContent='⚠ '+(r.body.error||'register failed');}
+  if (!country) country = (v('r_country_other') || 'FR').replace(/[^A-Z]/g,'').slice(0,2);
+  const r=await api('/api/register',{method:'POST',body:JSON.stringify({first:first,last:last,email:email,country:country,phone:phone,password:pass,consents:['terms','privacy']})});
+  if(r.ok) enter({name:first+' '+last});
+  else {
+    var msg = r.body.error || 'register failed';
+    if (r.body.fields && Array.isArray(r.body.fields)) msg = r.body.fields.join('. ');
+    el('out').textContent='⚠ ' + msg;
+  }
+}
 async function logout(){
   localStorage.removeItem('cognito_tokens');
   localStorage.removeItem('cognito_pkce');
@@ -274,10 +310,19 @@ setInterval(function() {
 }, 15000);
 
 async function submitIncident() {
+  // Validate description
+  var desc = (v('i_desc')||'').trim();
+  if (!desc) { showBanner('⚠ Please describe what happened','error'); return; }
+  if (desc.length > 2000) { showBanner('⚠ Description is too long (max 2000 characters)','error'); return; }
+  // Sanitize inputs
+  desc = desc.replace(/[<>]/g, '');
+  var addr = (v('i_addr')||'').trim().replace(/[<>]/g, '').slice(0,500);
+
   // If photo attached, upload it first
   var photoId = '';
   var file = el('i_photo').files[0];
   if (file) {
+    if (file.size > 10 * 1024 * 1024) { showBanner('⚠ Photo too large (max 10 MB)','error'); return; }
     var fd = new FormData();
     fd.append('photo', file);
     fd.append('type', 'incident_scene');
@@ -287,12 +332,12 @@ async function submitIncident() {
       if (pr.ok) photoId = pd.photo_id || '';
     } catch(e) { console.log('Photo upload skipped:', e); }
   }
-  var body = { incident: v('i_type'), description: v('i_desc'), address: v('i_addr'),
+  var body = { incident: v('i_type'), description: desc, address: addr,
                lat: sessionStorage.getItem('gps_lat') || '', lng: sessionStorage.getItem('gps_lng') || '',
                photo_id: photoId, transcript: sessionStorage.getItem('voice_transcript') || '' };
   var r = await api('/api/user/incident', { method: 'POST', body: JSON.stringify(body) });
   if (r.ok) { showBanner('✅ Case '+r.body.case_number+' — tracking live below','success'); showPostSubmitTracking(r.body.case_number); loadCases(); }
-  else showBanner('⚠ '+(r.body.error||'Request failed'),'error');
+  else showBanner('⚠ '+(r.body.error||'Request failed. Please try again.'),'error');
 }
 
 // P0-X1: Post-submission tracking view
