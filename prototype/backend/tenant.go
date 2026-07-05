@@ -110,9 +110,10 @@ func tenantMiddleware(next http.Handler) http.Handler {
 		tid := resolveTenantID(r)
 		// Only set RLS if we have a valid tenant and the DB is initialized
 		if tid != "" && tid != "none" && db != nil {
-			if _, err := db.Exec(r.Context(),
-				fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", tid)); err != nil {
-				// Log once per unique error to avoid spam
+			// Use parameterized query via set_config() to prevent SQL injection (researcher P0)
+			var prev string
+			if err := db.QueryRow(r.Context(),
+				`SELECT set_config('app.current_tenant', $1, true)`, tid).Scan(&prev); err != nil {
 				log.Printf(`{"stream":"error","event":"tenant_set_failed","tenant":%q,"err":%q}`, tid[:min(8, len(tid))], err.Error())
 			}
 		}

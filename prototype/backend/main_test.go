@@ -121,12 +121,19 @@ func TestSetSessionCookieFlags(t *testing.T) {
 	w := httptest.NewRecorder()
 	setSession(w, "user", "id-1", "Test User")
 	cookies := w.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("expected 1 cookie, got %d", len(cookies))
+	if len(cookies) != 2 {
+		t.Fatalf("expected 2 cookies (session + csrf), got %d", len(cookies))
 	}
-	c := cookies[0]
-	if c.Name != "insucar_session" {
-		t.Fatalf("cookie name: want insucar_session got %q", c.Name)
+	// Find the session cookie
+	var c *http.Cookie
+	for _, co := range cookies {
+		if co.Name == "insucar_session" {
+			c = co
+			break
+		}
+	}
+	if c == nil {
+		t.Fatal("insucar_session cookie not found")
 	}
 	if !c.HttpOnly {
 		t.Fatal("cookie should be HttpOnly")
@@ -142,6 +149,26 @@ func TestSetSessionCookieFlags(t *testing.T) {
 	}
 	if c.Path != "/" {
 		t.Fatalf("cookie path: want / got %q", c.Path)
+	}
+	// Verify CSRF cookie exists and has correct flags
+	var csrf *http.Cookie
+	for _, co := range cookies {
+		if co.Name == "csrf_token" {
+			csrf = co
+			break
+		}
+	}
+	if csrf == nil {
+		t.Fatal("csrf_token cookie not found")
+	}
+	if csrf.Value == "" {
+		t.Fatal("csrf_token value should not be empty")
+	}
+	if !csrf.Secure {
+		t.Fatal("csrf_token cookie should be Secure")
+	}
+	if csrf.HttpOnly {
+		t.Fatal("csrf_token cookie should NOT be HttpOnly (JS must read it)")
 	}
 }
 

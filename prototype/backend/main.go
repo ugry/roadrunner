@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +29,7 @@ import (
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -86,6 +90,7 @@ func main() {
 	// auth
 	mux.HandleFunc("/api/user/login", handleUserLogin)
 	mux.HandleFunc("/api/agent/login", handleAgentLogin)
+	mux.HandleFunc("/api/staff/login", handleAgentLogin) // alias for operator console
 	mux.HandleFunc("/api/logout", handleLogout)
 	mux.HandleFunc("/api/me", handleMe)
 
@@ -123,6 +128,11 @@ func main() {
 	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
 	mux.HandleFunc("/api/case/arrived", requireRole("user", handleCaseArrived))
 
+	// route aliases — shorter paths for REST convention
+	mux.HandleFunc("/api/policies", handlePoliciesAlias)
+	mux.HandleFunc("/api/cases", handleCasesAlias)
+	mux.HandleFunc("/api/lookup", handleLookup) // no auth wrapper — used by ANI screen-pop
+
 	// admin — requires staff session with admin/supervisor/product_owner role
 	mux.HandleFunc("/api/admin/rate-limits", requireAdmin(handleAdminRateLimits))
 	mux.HandleFunc("/api/admin/api-access", requireAdmin(handleAdminApiAccess))
@@ -150,7 +160,7 @@ func main() {
 
 	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; cognitoStaff=%v; cognitoPartner=%v; tenant=%s)",
 		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, cognitoStaff != nil, cognitoPartner != nil, defaultTenantID[:min(8, len(defaultTenantID))])
-	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(slogLogMW(sanitizeMW(rateLimitMW(mux))))))
+	log.Fatal(http.ListenAndServe(":8080", corsMW(csrfMW(tenantMiddleware(slogLogMW(sanitizeMW(rateLimitMW(mux))))))))
 }
 
 // ---------- infra helpers ----------
@@ -219,6 +229,96 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 func sha256hex(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
 
+// ---------- bcrypt password helpers (replaces sha256hex for auth) ----------
+func hashPasswordBcrypt(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+// verifyPassword checks bcrypt first, then falls back to SHA-256 for legacy hashes.
+// Returns true if the password matches the stored hash.
+func verifyPassword(hashed, password string) bool {
+	if strings.HasPrefix(hashed, "$2a$") || strings.HasPrefix(hashed, "$2b$") {
+		return bcrypt.CompareHashAndPassword([]byte(hashed), []byte(password)) == nil
+	}
+	// Legacy SHA-256 fallback
+	return sha256hex(password) == hashed
+}
+
+// isLegacyHash returns true if the stored hash is SHA-256 (not bcrypt).
+func isLegacyHash(hashed string) bool {
+	return !strings.HasPrefix(hashed, "$2a$") && !strings.HasPrefix(hashed, "$2b$")
+}
+
+// ---------- CSRF token helpers ----------
+var csrfSecret = []byte(getenv("CSRF_SECRET", "insucar-csrf-secret-change-me"))
+
+func generateCSRFToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func setCSRFCookie(w http.ResponseWriter) string {
+	token := generateCSRFToken()
+	http.SetCookie(w, &http.Cookie{
+		Name: "csrf_token", Value: token,
+		Path: "/", Secure: true, SameSite: http.SameSiteStrictMode,
+		MaxAge: 86400,
+	})
+	return token
+}
+
+// ---------- input sanitization ----------
+var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
+
+func stripHTML(s string) string {
+	return htmlTagRe.ReplaceAllString(s, "")
+}
+
+func sanitizeName(s string) string {
+	cleaned := stripHTML(strings.TrimSpace(s))
+	// Also strip common XSS patterns
+	cleaned = strings.ReplaceAll(cleaned, "javascript:", "")
+	cleaned = strings.ReplaceAll(cleaned, "onerror=", "")
+	cleaned = strings.ReplaceAll(cleaned, "onload=", "")
+	// Reject if contains suspicious characters after cleaning
+	if cleaned != s && strings.TrimSpace(s) != cleaned {
+		// Stripped something — log for audit
+		slog.Warn("xss_sanitized", "original", s[:min(50, len(s))])
+	}
+	return cleaned
+}
+
+// ---------- DB error sanitization ----------
+// sanitizeDBError maps PostgreSQL errors to safe, generic messages.
+func sanitizeDBError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	// Map common PostgreSQL error codes to generic messages
+	switch {
+	case strings.Contains(msg, "SQLSTATE 23505") || strings.Contains(msg, "duplicate key"):
+		return "a record with this value already exists"
+	case strings.Contains(msg, "SQLSTATE 23503") || strings.Contains(msg, "foreign key"):
+		return "referenced record not found"
+	case strings.Contains(msg, "SQLSTATE 23502") || strings.Contains(msg, "not-null"):
+		return "required field missing"
+	case strings.Contains(msg, "SQLSTATE 22"):
+		return "invalid data format"
+	case strings.Contains(msg, "SQLSTATE 42"):
+		return "system error"
+	case strings.Contains(msg, "SQLSTATE 40"):
+		return "operation timed out"
+	default:
+		return "an unexpected error occurred"
+	}
+}
+
 // ---------- sessions (HMAC-signed cookie: role|id|name|exp|sig) ----------
 func makeToken(role, id, name string) string {
 	exp := time.Now().Add(8 * time.Hour).Unix()
@@ -248,6 +348,7 @@ func parseToken(tok string) (role, id, name string, ok bool) {
 func setSession(w http.ResponseWriter, role, id, name string) {
 	http.SetCookie(w, &http.Cookie{Name: "insucar_session", Value: makeToken(role, id, name),
 		Path: "/", HttpOnly: true, Secure: true, MaxAge: 8 * 3600, SameSite: http.SameSiteLaxMode})
+	setCSRFCookie(w)
 }
 func currentSession(r *http.Request) (role, id, name string, ok bool) {
 	c, err := r.Cookie("insucar_session")
@@ -306,9 +407,15 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow(r.Context(),
 		`SELECT id,first_name,last_name,password_hash FROM customers WHERE email=$1`, in.Email).
 		Scan(&id, &first, &last, &hash)
-	if err != nil || hash == nil || *hash != sha256hex(in.Password) {
+	if err != nil || hash == nil || !verifyPassword(*hash, in.Password) {
 		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
 		return
+	}
+	// Upgrade legacy SHA-256 hash to bcrypt on successful login
+	if isLegacyHash(*hash) {
+		if newHash, e := hashPasswordBcrypt(in.Password); e == nil {
+			db.Exec(r.Context(), `UPDATE customers SET password_hash=$1 WHERE id=$2`, newHash, id)
+		}
 	}
 	setSession(w, "user", id, first+" "+last)
 	db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('auth.user.login',$1,'{}')`, in.Email)
@@ -316,26 +423,42 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAgentLogin(w http.ResponseWriter, r *http.Request) {
-	var in struct{ AgentID, Password string }
+	var in struct {
+		AgentID  string `json:"agent_id"`
+		AgentId  string `json:"agentID"`
+		Password string `json:"password"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
+	agentID := in.AgentID
+	if agentID == "" {
+		agentID = in.AgentId
+	}
 	var id, name, role string
 	var hash *string
 	err := db.QueryRow(r.Context(),
-		`SELECT id,display_name,role::text,password_hash FROM staff WHERE agent_id=$1 AND active`, in.AgentID).
+		`SELECT id,display_name,role::text,password_hash FROM staff WHERE agent_id=$1 AND active`, agentID).
 		Scan(&id, &name, &role, &hash)
-	if err != nil || hash == nil || *hash != sha256hex(in.Password) {
+	if err != nil || hash == nil || !verifyPassword(*hash, in.Password) {
 		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
 		return
 	}
+	// Upgrade legacy SHA-256 hash to bcrypt on successful login
+	if isLegacyHash(*hash) {
+		if newHash, e := hashPasswordBcrypt(in.Password); e == nil {
+			db.Exec(r.Context(), `UPDATE staff SET password_hash=$1 WHERE id=$2`, newHash, id)
+		}
+	}
 	setSession(w, "agent", id, name)
 	db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('auth.agent.login',$1,$2)`,
-		in.AgentID, fmt.Sprintf(`{"role":"%s"}`, role))
-	writeJSON(w, 200, map[string]any{"role": "agent", "id": id, "name": name, "staff_role": role, "agent_id": in.AgentID})
+		agentID, fmt.Sprintf(`{"role":"%s"}`, role))
+	writeJSON(w, 200, map[string]any{"role": "agent", "id": id, "name": name, "staff_role": role, "agent_id": agentID})
 }
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: "insucar_session", Value: "", Path: "/",
 		MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: "csrf_token", Value: "", Path: "/",
+		MaxAge: -1, Secure: true, SameSite: http.SameSiteStrictMode})
 	writeJSON(w, 200, map[string]string{"status": "logged_out"})
 }
 
@@ -348,6 +471,34 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"authenticated": true, "role": c.Role, "id": c.ID, "name": c.Name})
 }
 
+// handlePoliciesAlias resolves /api/policies based on caller role.
+func handlePoliciesAlias(w http.ResponseWriter, r *http.Request) {
+	c, ok := resolveCaller(r)
+	if !ok {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if c.Role == "agent" {
+		requireAdmin(handleAdminPolicies)(w, withCaller(r, c))
+		return
+	}
+	handleUserPolicies(w, withCaller(r, c))
+}
+
+// handleCasesAlias resolves /api/cases based on caller role.
+func handleCasesAlias(w http.ResponseWriter, r *http.Request) {
+	c, ok := resolveCaller(r)
+	if !ok {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if c.Role == "agent" {
+		handleAgentCases(w, withCaller(r, c))
+		return
+	}
+	handleUserCases(w, withCaller(r, c))
+}
+
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email, Phone, First, Last, Language, Country, Password string
@@ -358,8 +509,8 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// E1 + E8: Server-side validation
-	first := strings.TrimSpace(in.First)
-	last := strings.TrimSpace(in.Last)
+	first := sanitizeName(in.First)
+	last := sanitizeName(in.Last)
 	email := strings.TrimSpace(in.Email)
 	phone := strings.TrimSpace(in.Phone)
 	password := in.Password
@@ -397,12 +548,19 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id string
+	pwHash, hashErr := hashPasswordBcrypt(password)
+	if hashErr != nil {
+		slog.Error("bcrypt_hash_failed", "err", hashErr)
+		writeJSON(w, 500, map[string]string{"error": "registration failed — please try again"})
+		return
+	}
 	err := db.QueryRow(r.Context(),
 		`INSERT INTO customers(email,phone_e164,first_name,last_name,preferred_language,country_code,status,password_hash)
 		 VALUES($1,$2,$3,$4,$5,$6,'active',$7) RETURNING id`,
-		email, phone, first, last, nz(in.Language, "en"), nz(in.Country, "FR"), sha256hex(password)).Scan(&id)
+		email, phone, first, last, nz(in.Language, "en"), nz(in.Country, "FR"), pwHash).Scan(&id)
 	if err != nil {
-		writeJSON(w, 409, map[string]string{"error": err.Error()})
+		slog.Error("customer_register", "err", err, "email", email)
+		writeJSON(w, 409, map[string]string{"error": sanitizeDBError(err)})
 		return
 	}
 	for _, c := range in.Consents {
@@ -439,7 +597,7 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 		 VALUES($1,$2,'app','triaging','high',$3,now(),$4) RETURNING id`,
 		caseNo, uid, nz(in.Incident, "breakdown"), desc).Scan(&cid)
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "failed to create case: " + err.Error()})
+		writeJSON(w, 500, map[string]string{"error": "failed to create case"})
 		return
 	}
 	if in.Address != "" || in.Lat != "" {
@@ -828,7 +986,8 @@ func handleDispatch(w http.ResponseWriter, r *http.Request) {
 
 	result, err := dispatchWithFallback(r.Context(), in.CaseID, svc, in.ProviderID)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		slog.Error("dispatch_failed", "err", err, "case_id", in.CaseID, "service", svc)
+		writeJSON(w, 500, map[string]string{"error": "dispatch failed — all providers unavailable"})
 		return
 	}
 
@@ -1428,13 +1587,20 @@ func handleAdminOperators(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "email, agent_id and a password (min 8 chars) are required"})
 			return
 		}
+		pwHash, hashErr := hashPasswordBcrypt(in.Password)
+		if hashErr != nil {
+			slog.Error("bcrypt_hash_failed", "err", hashErr)
+			writeJSON(w, 500, map[string]string{"error": "failed to create operator — please try again"})
+			return
+		}
 		var id string
 		err := db.QueryRow(r.Context(),
 			`INSERT INTO staff(email,display_name,agent_id,password_hash,keycloak_subject,role,active)
 			 VALUES($1,$2,$3,$4,$5,'operator',true) RETURNING id`,
-			in.Email, nz(in.DisplayName, in.AgentID), in.AgentID, sha256hex(in.Password), "local:"+in.AgentID).Scan(&id)
+			in.Email, nz(in.DisplayName, in.AgentID), in.AgentID, pwHash, "local:"+in.AgentID).Scan(&id)
 		if err != nil {
-			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			slog.Error("admin_create_operator", "err", err, "agent_id", in.AgentID)
+			writeJSON(w, 409, map[string]string{"error": sanitizeDBError(err)})
 			return
 		}
 		writeJSON(w, 201, map[string]any{"id": id, "status": "created"})
@@ -1571,7 +1737,7 @@ func handleAdminPolicies(w http.ResponseWriter, r *http.Request) {
 			nz(in.Currency, "EUR"), in.CalloutLimit).Scan(&id)
 		if err != nil {
 			slog.Error("admin_policy_create", "err", err, "customer_id", in.CustomerID)
-			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			writeJSON(w, 409, map[string]string{"error": sanitizeDBError(err)})
 			return
 		}
 		db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('policy.created','admin',$1)`,
@@ -1657,6 +1823,77 @@ func slogLogMW(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("request", "method", r.Method, "path", r.URL.Path, "remote", clientIP(r))
 		h.ServeHTTP(w, r)
+	})
+}
+
+// ---------- CORS middleware ----------
+
+// corsMW adds permissive CORS headers for cross-origin API consumers.
+func corsMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		if r.Method == "OPTIONS" {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(204)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ---------- CSRF middleware ----------
+
+// csrfMW validates CSRF tokens on state-changing API requests.
+// Uses double-submit cookie pattern: the csrf_token cookie value must match
+// the X-CSRF-Token header. GET/HEAD/OPTIONS are exempt; login/register
+// endpoints are exempt (no session yet).
+func csrfMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Skip for safe methods
+		if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Skip for login, register, and CORS-related endpoints (no session yet)
+		if strings.HasPrefix(path, "/api/") &&
+			(strings.HasSuffix(path, "/login") || strings.HasSuffix(path, "/register") ||
+				path == "/api/register" || path == "/api/auth/config") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Skip for provider webhooks (external callers)
+		if path == "/api/webhook/provider" || path == "/api/pinpoint/callback" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Validate CSRF
+		csrfCookie, err := r.Cookie("csrf_token")
+		if err != nil {
+			slog.Warn("csrf_missing_cookie", "path", path, "method", r.Method, "remote", clientIP(r))
+			writeJSON(w, 403, map[string]string{"error": "csrf token required — refresh the page and try again"})
+			return
+		}
+		headerToken := r.Header.Get("X-CSRF-Token")
+		if headerToken == "" || !hmac.Equal([]byte(headerToken), []byte(csrfCookie.Value)) {
+			slog.Warn("csrf_mismatch", "path", path, "method", r.Method, "remote", clientIP(r))
+			writeJSON(w, 403, map[string]string{"error": "invalid csrf token"})
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
