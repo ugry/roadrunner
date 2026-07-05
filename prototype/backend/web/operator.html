@@ -739,10 +739,15 @@ function renderQueue() {
   var h = '<table><tr><th>Case</th><th>Customer</th><th>Type</th><th>Age</th><th>Prio</th></tr>';
   cases.forEach(function(x) {
     var age = fmtAge(x.created_at);
+    var ageSecs = (Date.now() - new Date(x.created_at).getTime()) / 1000;
+    var ageBar = '';
+    if (ageSecs > 5400) ageBar = 'style="border-left:4px solid var(--danger)"';       // >90 min → red
+    else if (ageSecs > 3600) ageBar = 'style="border-left:4px solid var(--warn);background:color-mix(in oklab,var(--warn) 6%,transparent)"'; // >60 min → amber bold
+    else if (ageSecs > 1800) ageBar = 'style="border-left:4px solid color-mix(in oklab,var(--warn) 50%,transparent)"'; // >30 min → amber light
     var flash = '';
     if (newIds.indexOf(x.id) >= 0 && Object.keys(lastCases).length > 5) flash = ' class="new-case-flash"';
     var cn = (x.case_number || '').replace('CASE-', '#');
-    h += '<tr' + flash + ' onclick="openCase(\'' + x.id + '\')"><td class="mono">' + cn + '</td><td>' + (x.customer || '?') + '</td><td>' + (x.incident || '—') + '</td><td class="mono">' + age + '</td><td><span class="qp ' + (x.priority || 'normal') + '">' + (x.priority || 'normal') + '</span></td></tr>';
+    h += '<tr' + flash + ' ' + ageBar + ' onclick="openCase(\'' + x.id + '\')"><td class="mono">' + cn + '</td><td>' + (x.customer || '?') + '</td><td>' + (x.incident || '—') + '</td><td class="mono">' + age + '</td><td><span class="qp ' + (x.priority || 'normal') + '">' + (x.priority || 'normal') + '</span></td></tr>';
   });
   el('queue').innerHTML = h + '</table>';
 
