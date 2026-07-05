@@ -13,10 +13,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
@@ -74,6 +74,9 @@ func main() {
 	// public
 	mux.HandleFunc("/api/register", handleRegister)
 	mux.HandleFunc("/api/telephony/mock/incoming", handleMockIncoming)
+	mux.HandleFunc("/api/telephony/mock/psap", handleMockPsap)
+	mux.HandleFunc("/api/telephony/mock/call-state", handleMockCallState)
+	mux.HandleFunc("/api/webhook/provider", handleProviderWebhook)
 
 	// user (customer) — requires user session
 	mux.HandleFunc("/api/user/incident", requireRole("user", handleUserIncident))
@@ -95,8 +98,10 @@ func main() {
 	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc(opsPath, serveFile("operator.html"))
 
+	startProviderHealthLoop(context.Background())
+
 	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; tenant=%s)",
-		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, defaultTenantID[:8])
+		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, defaultTenantID[:min(8, len(defaultTenantID))])
 	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(logMW(mux))))
 }
 
@@ -501,67 +506,130 @@ func handleMockIncoming(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, pop)
 }
 
+// handleMockPsap performs a simulated PSAP (112) warm-transfer with audit trail.
+func handleMockPsap(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		CaseID string `json:"case_id"`
+		Reason string `json:"reason"`
+	}
+	json.NewDecoder(r.Body).Decode(&in)
+	if in.CaseID == "" {
+		writeJSON(w, 400, map[string]string{"error": "case_id required"})
+		return
+	}
+	// Audit the PSAP transfer
+	db.Exec(r.Context(),
+		`INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'psap_transfer',$2)`,
+		in.CaseID, fmt.Sprintf("PSAP 112 warm-transfer initiated. Reason: %s", nz(in.Reason, "emergency")))
+	db.Exec(r.Context(),
+		`INSERT INTO case_safety(case_id,emergency_services_called,emergency_reference)
+		 VALUES($1,true,$2) ON CONFLICT(case_id) DO UPDATE SET emergency_services_called=true`,
+		in.CaseID, fmt.Sprintf("PSAP-%d", time.Now().Unix()))
+	// Update case priority to emergency
+	db.Exec(r.Context(), `UPDATE cases SET priority='emergency' WHERE id=$1 AND priority!='emergency'`, in.CaseID)
+
+	writeJSON(w, 200, map[string]any{
+		"status":         "transferred",
+		"case_id":        in.CaseID,
+		"reference":      fmt.Sprintf("PSAP-%d", time.Now().Unix()),
+		"timestamp":      time.Now(),
+		"instructions":   "Stay on the line. Operator will hand over key details to 112 dispatcher.",
+	})
+}
+
+// mockCallState tracks simulated call lifecycle state.
+var mockCallStates = map[string]map[string]any{} // phone -> call state
+var mockCallMu sync.RWMutex
+
+// handleMockCallState manages the mock call lifecycle: ringing → answered → connected → wrap-up → ended.
+func handleMockCallState(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		// Return current call state
+		phone := r.URL.Query().Get("phone")
+		mockCallMu.RLock()
+		state, ok := mockCallStates[phone]
+		mockCallMu.RUnlock()
+		if !ok {
+			writeJSON(w, 200, map[string]any{"phone": phone, "call_state": "idle"})
+			return
+		}
+		// Calculate live duration
+		if started, ok2 := state["started_at"].(time.Time); ok2 {
+			state["duration"] = time.Since(started).Truncate(time.Second).String()
+		}
+		writeJSON(w, 200, state)
+	case "POST":
+		// Advance call state
+		var in struct {
+			Phone string `json:"phone"`
+			State string `json:"state"` // ringing, answered, connected, wrapup, ended
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		valid := map[string]bool{
+			"ringing": true, "answered": true, "connected": true, "wrapup": true, "ended": true,
+		}
+		if !valid[in.State] {
+			writeJSON(w, 400, map[string]string{"error": "invalid state: use ringing/answered/connected/wrapup/ended"})
+			return
+		}
+		mockCallMu.Lock()
+		mockCallStates[in.Phone] = map[string]any{
+			"phone":      in.Phone,
+			"call_state": in.State,
+			"started_at": time.Now(),
+		}
+		mockCallMu.Unlock()
+
+		// Log call state change to interaction log if case context available
+		cid := r.URL.Query().Get("case_id")
+		if cid != "" {
+			db.Exec(r.Context(),
+				`INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'call',$2)`,
+				cid, fmt.Sprintf("Call state: %s (ANI: %s)", in.State, in.Phone))
+		}
+
+		writeJSON(w, 200, map[string]any{
+			"phone":      in.Phone,
+			"call_state": in.State,
+			"timestamp":  time.Now(),
+		})
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+	}
+}
+
 func handleDispatch(w http.ResponseWriter, r *http.Request) {
 	var in struct{ CaseID, Service, ProviderID string }
 	json.NewDecoder(r.Body).Decode(&in)
 	svc := nz(in.Service, "tow_recovery")
 	publishEvent(r.Context(), "case.dispatch.requested", map[string]any{"case_id": in.CaseID, "service": svc})
-	var provID, provName string
-	// allow specific provider selection (fallback/manual), else auto-pick nearest
-	if in.ProviderID != "" {
-		err := db.QueryRow(r.Context(), `SELECT id,display_name FROM providers WHERE id=$1 AND status='enabled'`, in.ProviderID).
-			Scan(&provID, &provName)
-		if err != nil {
-			writeJSON(w, 404, map[string]string{"error": "provider not found"})
-			return
-		}
-	} else {
-		if db.QueryRow(r.Context(), `SELECT id,display_name FROM providers WHERE status='enabled' ORDER BY priority_rank ASC LIMIT 1`).
-			Scan(&provID, &provName) != nil {
-			writeJSON(w, 404, map[string]string{"error": "no provider available"})
-			return
-		}
-	}
-	src := "internal"
-	eta := 18 + rand.Intn(25)
-	if providerURL != "" {
-		if pe, ok := callProvider(r.Context(), in.CaseID, svc); ok {
-			src = "api"
-			if pe > 0 {
-				eta = pe
-			}
-		}
-	}
-	var mid string
-	if db.QueryRow(r.Context(),
-		`INSERT INTO missions(case_id,provider_id,service,source,status,eta_minutes)
-		 VALUES($1,$2,$3,$4,'en_route',$5) RETURNING id`,
-		in.CaseID, provID, svc, src, eta).Scan(&mid) != nil {
-		writeJSON(w, 400, map[string]string{"error": "dispatch failed"})
+
+	result, err := dispatchWithFallback(r.Context(), in.CaseID, svc, in.ProviderID)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
-	// add mission status event for timeline
-	db.Exec(r.Context(),
-		`INSERT INTO mission_status_events(mission_id,status,eta_minutes,occurred_at)
-		 VALUES($1,'en_route',$2,now())`, mid, eta)
-	// use real driver from DB or fallback
-	var drvName, drvPlate string
-	if db.QueryRow(r.Context(),
-		`SELECT coalesce(driver_name,'Pierre L.'),coalesce(vehicle_plate,'TOW-77-FR')
-		 FROM mission_driver WHERE mission_id=$1`, mid).Scan(&drvName, &drvPlate) != nil {
-		drvName = "Pierre L."
-		drvPlate = "TOW-77-FR"
-		db.Exec(r.Context(), `INSERT INTO mission_driver(mission_id,driver_name,vehicle_plate) VALUES($1,$2,$3)`, mid, drvName, drvPlate)
-	}
-	db.Exec(r.Context(), `UPDATE cases SET status='dispatched' WHERE id=$1`, in.CaseID)
-	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'dispatch',$2)`, in.CaseID,
-		fmt.Sprintf("dispatched %s ETA %d min", provName, eta))
-	link := statusBase + "/" + fmt.Sprintf("%d", time.Now().UnixNano())
-	smsStatus := sendSMS(r.Context(), in.CaseID, provName, drvName, drvPlate, eta, link)
-	publishEvent(r.Context(), "case.dispatched", map[string]any{"case_id": in.CaseID, "mission_id": mid, "provider": provName, "eta_minutes": eta, "source": src})
-	writeJSON(w, 201, map[string]any{"mission_id": mid, "provider": provName, "provider_source": src,
-		"eta_minutes": eta, "driver": map[string]string{"name": drvName, "plate": drvPlate},
-		"status": "en_route", "status_link": link, "sms": smsStatus})
+
+	mid, _ := result["mission_id"].(string)
+	provName, _ := result["provider"].(string)
+	eta, _ := result["eta_minutes"].(int)
+	src, _ := result["provider_source"].(string)
+	link, _ := result["status_link"].(string)
+	sms, _ := result["sms"].(string)
+	drv, _ := result["driver"].(map[string]string)
+
+	publishEvent(r.Context(), "case.dispatched", map[string]any{
+		"case_id": in.CaseID, "mission_id": mid, "provider": provName,
+		"eta_minutes": eta, "source": src, "attempted": result["attempted"],
+	})
+
+	status := "en_route"
+	writeJSON(w, 201, map[string]any{
+		"mission_id": mid, "provider": provName, "provider_source": src,
+		"eta_minutes": eta, "status": status, "status_link": link, "sms": sms,
+		"driver": drv, "attempted": result["attempted"],
+	})
 }
 
 // AGENT: list enabled providers with availability, capabilities, SLA
