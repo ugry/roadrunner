@@ -86,6 +86,9 @@
         <select id="i_type"><option value="breakdown">Car won't start</option><option value="accident">Accident</option><option value="flat_tyre">Flat tyre</option><option value="ev_no_charge">EV — no charge</option><option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option></select>
         <label>Describe it</label><textarea id="i_desc" rows="2" placeholder="engine won't turn over on the A6 near Beaune"></textarea>
         <label>Location <button type="button" class="btn-ghost" style="margin-top:0;width:auto;padding:4px 10px;font-size:12px;float:right" onclick="getGPSLocation()">📍 Use my location</button></label><input id="i_addr" placeholder="A6 southbound, km 292">
+        <label>Photo of scene <span style="font-size:11px;color:var(--muted);font-weight:400">(optional, helps assess urgency)</span></label>
+        <input type="file" id="i_photo" accept="image/*" capture="environment" onchange="previewPhoto()" style="padding:9px;margin-bottom:8px">
+        <img id="photoPreview" style="display:none;max-width:100%;max-height:200px;border-radius:8px;margin-bottom:10px;border:1px solid var(--line)">
         <button class="btn btn-danger" onclick="submitIncident()">🚨 Request assistance now</button>
       </div></div>
       <div class="card"><div class="card-h"><b>My cases</b><span class="pill" id="me2" style="margin-left:auto"></span></div><div class="card-b" style="padding-top:8px"><div id="cases" class="muted">—</div></div></div>
@@ -135,7 +138,36 @@ async function logout(){
   location.reload();
 }
 function enter(me){el('authcard').classList.add('hidden');el('dash').classList.remove('hidden');el('whoami').textContent=me.name||'';el('me2').textContent=me.name||'';el('loginTop').classList.add('hidden');el('logoutTop').classList.remove('hidden');loadCases();}
-async function submitIncident(){const r=await api('/api/user/incident',{method:'POST',body:JSON.stringify({incident:v('i_type'),description:v('i_desc'),address:v('i_addr'),lat:sessionStorage.getItem('gps_lat')||'',lng:sessionStorage.getItem('gps_lng')||''})});if(r.ok){alert('Case created: '+r.body.case_number+' — a coordinator will assist you.');loadCases();}else alert('Error: '+(r.body.error||r.status));}
+function previewPhoto() {
+  var f = el('i_photo').files[0];
+  var img = el('photoPreview');
+  if (!f) { img.style.display = 'none'; return; }
+  var reader = new FileReader();
+  reader.onload = function(e) { img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(f);
+}
+
+async function submitIncident() {
+  // If photo attached, upload it first
+  var photoId = '';
+  var file = el('i_photo').files[0];
+  if (file) {
+    var fd = new FormData();
+    fd.append('photo', file);
+    fd.append('type', 'incident_scene');
+    try {
+      var pr = await fetch('/api/upload/photo', { method: 'POST', body: fd, credentials: 'include' });
+      var pd = await pr.json();
+      if (pr.ok) photoId = pd.photo_id || '';
+    } catch(e) { console.log('Photo upload skipped:', e); }
+  }
+  var body = { incident: v('i_type'), description: v('i_desc'), address: v('i_addr'),
+               lat: sessionStorage.getItem('gps_lat') || '', lng: sessionStorage.getItem('gps_lng') || '',
+               photo_id: photoId };
+  var r = await api('/api/user/incident', { method: 'POST', body: JSON.stringify(body) });
+  if (r.ok) { alert('Case created: ' + r.body.case_number + ' — a coordinator will assist you.'); loadCases(); }
+  else alert('Error: ' + (r.body.error || r.status));
+}
 function getGPSLocation() {
   el('i_addr').placeholder = 'Getting location…';
   el('i_addr').value = '';

@@ -74,6 +74,8 @@ func main() {
 
 	// public
 	mux.HandleFunc("/api/register", handleRegister)
+	mux.HandleFunc("/api/upload/photo", handlePhotoUpload)
+	mux.HandleFunc("/api/photo/", handlePhotoServe)
 	mux.HandleFunc("/api/telephony/mock/incoming", handleMockIncoming)
 	mux.HandleFunc("/api/status/", handleStatusPage)
 	mux.HandleFunc("/api/telephony/mock/psap", handleMockPsap)
@@ -317,7 +319,7 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 	if c, ok := callerFrom(r); ok {
 		uid = c.ID
 	}
-	var in struct{ Incident, Description, Address, Lat, Lng string }
+	var in struct{ Incident, Description, Address, Lat, Lng, PhotoID string }
 	json.NewDecoder(r.Body).Decode(&in)
 	caseNo := fmt.Sprintf("CASE-%d", time.Now().Unix())
 	var cid string
@@ -332,7 +334,11 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 	if in.Address != "" || in.Lat != "" {
 		db.Exec(r.Context(), `INSERT INTO case_locations(case_id,address_text,capture_method) VALUES($1,$2,'app')`, cid, in.Address)
 	}
-	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'note',$2)`, cid, "customer submitted via app: "+in.Description)
+	note := "customer submitted via app: " + in.Description
+	if in.PhotoID != "" {
+		note += " [photo: /api/photo/" + in.PhotoID + "]"
+	}
+	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'note',$2)`, cid, note)
 	publishEvent(r.Context(), "case.created", map[string]any{"case_id": cid, "case_number": caseNo, "incident": nz(in.Incident, "breakdown"), "customer_id": uid})
 	writeJSON(w, 201, map[string]string{"case_id": cid, "case_number": caseNo, "status": "triaging"})
 }
@@ -493,6 +499,48 @@ func handleLookup(w http.ResponseWriter, r *http.Request) {
 	m["matched"] = true
 	m["phone"] = phone
 	writeJSON(w, 200, m)
+}
+
+// handlePhotoUpload accepts multipart photo uploads, saves to disk, returns photo_id.
+func handlePhotoUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "file too large (max 10 MB)"})
+		return
+	}
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "no photo file provided"})
+		return
+	}
+	defer file.Close()
+
+	photoID := fmt.Sprintf("photo-%d-%s", time.Now().UnixNano(),
+		strings.ToLower(strings.ReplaceAll(header.Filename, " ", "-")))
+	os.MkdirAll("/tmp/photos", 0755)
+	dst, _ := os.Create("/tmp/photos/" + photoID)
+	if dst != nil {
+		defer dst.Close()
+		io.Copy(dst, file)
+	}
+	writeJSON(w, 201, map[string]any{
+		"photo_id": photoID, "filename": header.Filename,
+		"size_bytes": header.Size, "url": "/api/photo/" + photoID,
+	})
+}
+
+// handlePhotoServe serves uploaded photos by ID.
+func handlePhotoServe(w http.ResponseWriter, r *http.Request) {
+	photoID := strings.TrimPrefix(r.URL.Path, "/api/photo/")
+	if photoID == "" || strings.Contains(photoID, "..") {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFile(w, r, "/tmp/photos/"+photoID)
 }
 
 func handleMockIncoming(w http.ResponseWriter, r *http.Request) {
