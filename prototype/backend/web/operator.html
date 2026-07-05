@@ -882,8 +882,14 @@ async function incoming() {
   if (!p.matched) { el('popline').textContent = 'Unknown caller — create case manually'; return; }
   var sp = p.screen_pop;
   el('popline').innerHTML = '📞 <b>' + sp.customer.first_name + ' ' + sp.customer.last_name + '</b> · ' + sp.policy.policy_number + ' · ' + sp.vehicle.make + ' ' + sp.vehicle.model;
-  // auto-screen-pop: find the latest case for this customer
-  loadQueue();
+  await loadQueue();
+  // P0-3: screen-pop auto-bind — auto-open the first matching case or latest case
+  await new Promise(function(rs) { setTimeout(rs, 400); }); // wait for queue DOM update
+  var rows = el('queue').querySelectorAll('table tr');
+  if (rows.length >= 2) {
+    var firstRow = rows[1];
+    firstRow.click(); // auto-open the latest/top case for the operator
+  }
 }
 
 // ===== DISPATCH =====

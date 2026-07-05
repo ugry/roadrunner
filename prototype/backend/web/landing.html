@@ -242,6 +242,7 @@
   .main-nav a:hover::after { right:0; }
 
   .header-cta { margin-left: auto; display: flex; align-items: center; gap: var(--sp-13); }
+  .mobile-login { display: none; }
 
   .menu-toggle {
     display: none; background: none; border: 1px solid var(--border-strong);
@@ -599,6 +600,7 @@
     .steps { grid-template-columns: 1fr; gap: var(--sp-34); }
     .step:not(:last-child)::after { display:none; }
     .main-nav, .header-cta .btn-ghost.desktop-login { display:none; }
+    .mobile-login { display: inline-flex; }
     .menu-toggle { display:flex; margin-left:auto; }
     .header-cta { margin-left:0; }
     .site-header.open .main-nav {
@@ -667,6 +669,7 @@
     <div class="header-cta">
       <a class="btn btn-ghost btn-sm desktop-login" href="/app">Log in</a>
       <a class="btn btn-primary btn-sm" href="/app"><span class="live-dot"></span>Get help now</a>
+      <a class="btn btn-ghost btn-sm mobile-login" href="/app">Log in</a>
       <button class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="siteHeader">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
