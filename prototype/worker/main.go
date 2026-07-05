@@ -19,18 +19,23 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	queueURL := os.Getenv("DISPATCH_QUEUE_URL")
 	if queueURL == "" {
-		log.Fatal("DISPATCH_QUEUE_URL not set")
+		// SQS not provisioned yet (Terraform not applied). Idle instead of crashing so
+		// the deployment stays healthy; real processing resumes once DISPATCH_QUEUE_URL is set.
+		log.Printf(`{"stream":"system","event":"worker_idle","reason":"DISPATCH_QUEUE_URL not set — SQS not provisioned"}`)
+		<-ctx.Done()
+		log.Printf(`{"stream":"system","event":"worker_stop"}`)
+		return
 	}
 	cfg, err := awscfg.LoadDefaultConfig(context.Background())
 	if err != nil {
 		log.Fatalf("aws config: %v", err)
 	}
 	client := sqs.NewFromConfig(cfg)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	log.Printf(`{"stream":"system","event":"worker_start","queue":%q}`, queueURL)
 	for ctx.Err() == nil {
