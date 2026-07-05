@@ -93,7 +93,8 @@ func main() {
 	mux.HandleFunc("/api/agent/dispatch", requireRole("agent", handleDispatch))
 	mux.HandleFunc("/api/agent/providers", requireRole("agent", handleAgentProviders))
 	mux.HandleFunc("/api/agent/stats", requireRole("agent", handleAgentStats))
-	mux.HandleFunc("/api/agent/status", requireRole("agent", handleAgentStatus))
+	mux.HandleFunc("/api/agent/sms-journey", requireRole("agent", handleSmsJourney))
+	mux.HandleFunc("/api/case/rate", requireRole("user", handleCaseRate))
 
 	// auth config (Cognito setup exposed to frontends)
 	mux.HandleFunc("/api/auth/config", handleAuthConfig)
@@ -350,15 +351,18 @@ func handleUserCases(w http.ResponseWriter, r *http.Request) {
 		uid = c.ID
 	}
 	rows, _ := db.Query(r.Context(),
-		`SELECT case_number,status::text,incident::text,coalesce(symptom_description,''),created_at
+		`SELECT id, case_number,status::text,incident::text,coalesce(symptom_description,''),created_at,
+		        coalesce(satisfaction_score,0), coalesce(resolution_notes,'')
 		 FROM cases WHERE customer_id=$1 ORDER BY created_at DESC`, uid)
 	defer rows.Close()
 	var out []map[string]any
 	for rows.Next() {
-		var no, st, inc, desc string
+		var id, no, st, inc, desc, notes string
+		var score int
 		var ts time.Time
-		rows.Scan(&no, &st, &inc, &desc, &ts)
-		out = append(out, map[string]any{"case_number": no, "status": st, "incident": inc, "description": desc, "created_at": ts})
+		rows.Scan(&id, &no, &st, &inc, &desc, &ts, &score, &notes)
+		out = append(out, map[string]any{"id": id, "case_number": no, "status": st, "incident": inc,
+			"description": desc, "created_at": ts, "score": score, "notes": notes})
 	}
 	writeJSON(w, 200, map[string]any{"cases": out})
 }
@@ -788,6 +792,119 @@ func handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 		db.Exec(r.Context(), `UPDATE staff SET status=$1 WHERE id=$2`, in.Status, c.ID)
 	}
 	writeJSON(w, 200, map[string]any{"status": in.Status, "operator_id": c.ID})
+}
+
+// SMS journey: sends progressive notifications to the customer.
+// Steps: assigned, arriving, arrived, resolved, rate
+var smsJourneySteps = []struct{ Key, Template string }{
+	{"assigned", "Insucar: %s assigned — %s (%s), ETA ~%d min. Track: %s"},
+	{"arriving", "Insucar: %s is arriving in ~5 minutes. %s (%s)"},
+	{"arrived", "Insucar: %s has arrived at your location. %s"},
+	{"resolved", "Insucar: Your case %s has been resolved. Thank you for choosing Insucar."},
+	{"rate", "Insucar: How was your experience? Rate us: %s"},
+}
+
+func getSmsStep(idx int) (string, string) {
+	if idx >= 0 && idx < len(smsJourneySteps) {
+		return smsJourneySteps[idx].Key, smsJourneySteps[idx].Template
+	}
+	return "", ""
+}
+
+func handleSmsJourney(w http.ResponseWriter, r *http.Request) {
+	var in struct{ CaseID, Step string }
+	json.NewDecoder(r.Body).Decode(&in)
+	if in.CaseID == "" || in.Step == "" {
+		writeJSON(w, 400, map[string]string{"error": "caseID and step required"})
+		return
+	}
+	// Find the step index
+	stepIdx := -1
+	for i, s := range smsJourneySteps {
+		if s.Key == in.Step { stepIdx = i; break }
+	}
+	if stepIdx < 0 {
+		writeJSON(w, 400, map[string]string{"error": "invalid step: use assigned/arriving/arrived/resolved/rate"})
+		return
+	}
+	// Get case + mission + driver info
+	var phone, prov, drv, plate, caseNo string
+	var eta int
+	db.QueryRow(r.Context(), `
+		SELECT c.phone_e164, p.display_name, COALESCE(md.driver_name,''), COALESCE(md.vehicle_plate,''),
+		       ca.case_number, COALESCE(m.eta_minutes,0)
+		FROM cases ca JOIN customers c ON c.id=ca.customer_id
+		LEFT JOIN missions m ON m.case_id=ca.id
+		LEFT JOIN providers p ON p.id=m.provider_id
+		LEFT JOIN mission_driver md ON md.mission_id=m.id
+		WHERE ca.id=$1 ORDER BY m.created_at DESC LIMIT 1`, in.CaseID).
+		Scan(&phone, &prov, &drv, &plate, &caseNo, &eta)
+
+	if phone == "" {
+		writeJSON(w, 404, map[string]string{"error": "case or phone not found"})
+		return
+	}
+
+	link := statusBase + "/" + caseNo
+	var msg string
+	switch in.Step {
+	case "assigned":
+		msg = fmt.Sprintf(smsJourneySteps[0].Template, prov, drv, plate, eta, link)
+	case "arriving":
+		msg = fmt.Sprintf(smsJourneySteps[1].Template, prov, drv, plate)
+	case "arrived":
+		msg = fmt.Sprintf(smsJourneySteps[2].Template, prov, drv)
+	case "resolved":
+		msg = fmt.Sprintf(smsJourneySteps[3].Template, caseNo)
+	case "rate":
+		rateLink := statusBase + "/rate/" + in.CaseID
+		msg = fmt.Sprintf(smsJourneySteps[4].Template, rateLink)
+	}
+
+	if snsClient != nil {
+		snsClient.Publish(r.Context(), &sns.PublishInput{PhoneNumber: &phone, Message: &msg})
+	}
+	db.Exec(r.Context(), `INSERT INTO notifications(case_id,channel,recipient,template,status,status_link_token)
+		VALUES($1,'sms',$2,$3,'sent',$4)`, in.CaseID, phone, in.Step, link)
+	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note)
+		VALUES($1,'sms_journey',$2)`, in.CaseID, "sent step: "+in.Step)
+
+	// Update case status on resolved
+	if in.Step == "resolved" {
+		db.Exec(r.Context(), `UPDATE cases SET status='resolved', resolved_at=now() WHERE id=$1`, in.CaseID)
+	}
+
+	writeJSON(w, 200, map[string]any{
+		"step": in.Step, "case_id": in.CaseID, "recipient": phone, "status": "sent",
+	})
+}
+
+// Case rating: customer rates service after case resolved.
+func handleCaseRate(w http.ResponseWriter, r *http.Request) {
+	var in struct{ CaseID string; Score int; Comment string }
+	json.NewDecoder(r.Body).Decode(&in)
+	if in.CaseID == "" || in.Score < 1 || in.Score > 5 {
+		writeJSON(w, 400, map[string]string{"error": "caseID and score (1-5) required"})
+		return
+	}
+	uid := ""
+	if c, ok := callerFrom(r); ok { uid = c.ID }
+
+	// Verify case belongs to this user
+	var owner string
+	if db.QueryRow(r.Context(), `SELECT customer_id FROM cases WHERE id=$1`, in.CaseID).Scan(&owner) != nil || owner != uid {
+		writeJSON(w, 403, map[string]string{"error": "not your case"})
+		return
+	}
+
+	db.Exec(r.Context(), `UPDATE cases SET satisfaction_score=$1, resolution_notes=COALESCE(resolution_notes,'')||' [rated: '||$2||'/5]' WHERE id=$3`,
+		in.Score, in.Score, in.CaseID)
+	if in.Comment != "" {
+		db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'rating',$2)`,
+			in.CaseID, fmt.Sprintf("score=%d/5 — %s", in.Score, in.Comment))
+	}
+
+	writeJSON(w, 200, map[string]any{"case_id": in.CaseID, "score": in.Score, "status": "rated"})
 }
 
 func callProvider(ctx context.Context, caseID, service string) (int, bool) {

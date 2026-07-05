@@ -187,8 +187,25 @@ function getGPSLocation() {
 }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function loadCases(){const r=await api('/api/user/cases');const c=r.body.cases||[];if(!c.length){el('cases').textContent='No cases yet.';return;}
- let h='';c.forEach(x=>h+=`<div class="case-item"><div class="case-top"><span class="case-no">${esc(x.case_number.replace('CASE-','Case #'))}</span><span class="pill">${esc(x.status)}</span></div><div class="case-type">${esc(x.incident).replace(/_/g,' ')}</div>${x.description?`<div class="case-desc">${esc(x.description)}</div>`:''}</div>`);
+ let h='';c.forEach(x=>{
+  var rated = x.score > 0;
+  h+='<div class="case-item"><div class="case-top"><span class="case-no">'+esc(x.case_number.replace('CASE-','Case #'))+'</span><span class="pill">'+esc(x.status)+'</span></div>';
+  h+='<div class="case-type">'+esc(x.incident).replace(/_/g,' ')+'</div>';
+  if(x.description) h+='<div class="case-desc">'+esc(x.description)+'</div>';
+  if(x.status==='resolved'&&!rated){
+    h+='<div class="rating" style="margin-top:8px;display:flex;gap:4px">';
+    for(var s=1;s<=5;s++) h+='<span onclick="rateCase(\''+x.id+'\','+s+')" style="cursor:pointer;font-size:22px;color:#e3ece8" onmouseover="this.style.color=\'#f5a623\'" onmouseout="this.style.color=\'#e3ece8\'">★</span>';
+    h+='</div>';
+  }
+  if(rated) h+='<div style="margin-top:4px;color:var(--amber);font-size:14px">'+'★'.repeat(x.score)+'☆'.repeat(5-x.score)+'</div>';
+  h+='</div>';
+ });
  el('cases').innerHTML=h;}
+async function rateCase(caseNo, score) {
+  var r = await api('/api/case/rate', { method: 'POST', body: JSON.stringify({ caseID: caseNo, score: score }) });
+  if (r.ok) loadCases();
+  else alert('Rating failed: ' + (r.body.error || ''));
+}
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
 </script>
 </body></html>

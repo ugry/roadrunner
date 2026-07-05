@@ -430,7 +430,15 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
         </div>
         <div class="panel">
           <div class="panel-head"><div class="panel-title">Case queue</div><div style="display:flex;align-items:center;gap:8px"><span class="tag" id="q-count">0</span><span class="refresh-indicator live" id="refreshDot"></span></div></div>
-          <div class="panel-body" style="padding:6px"><div id="queue" class="dim" style="padding:10px">loading…</div></div>
+          <div class="panel-body" style="padding:6px">
+            <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap" id="qFilters">
+              <button class="qp-filter on" data-filter="all" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);background:var(--surface-warm);color:var(--muted);border-radius:3px;cursor:pointer">All</button>
+              <button class="qp-filter" data-filter="emergency" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);background:var(--surface-warm);color:var(--danger);border-radius:3px;cursor:pointer">🔴 Emergency</button>
+              <button class="qp-filter" data-filter="high" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);background:var(--surface-warm);color:var(--warn);border-radius:3px;cursor:pointer">🟡 High</button>
+              <button class="qp-filter" data-filter="waiting" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);background:var(--surface-warm);color:var(--accent);border-radius:3px;cursor:pointer">⏳ Waiting</button>
+            </div>
+            <div id="queue" class="dim" style="padding:10px">loading…</div>
+          </div>
         </div>
       </div>
 
@@ -689,21 +697,30 @@ function stopTimers() {
 // ===== QUEUE + STATS =====
 async function loadQueue() {
   var r = await api('/api/agent/cases');
-  var cases = r.body.cases || [];
+  allCases = r.body.cases || [];
+  renderQueue();
+}
+
+function renderQueue() {
+  var cases = allCases;
+  // Apply filter
+  if (queueFilter === 'emergency') cases = cases.filter(function(x) { return x.priority === 'emergency'; });
+  else if (queueFilter === 'high') cases = cases.filter(function(x) { return x.priority === 'high'; });
+  else if (queueFilter === 'waiting') cases = cases.filter(function(x) { return x.status === 'triaging' || x.status === 'new'; });
+
   el('q-count').textContent = cases.length;
 
-  // change detection: flash new cases
   var curIds = {};
   var newIds = [];
   cases.forEach(function(x) { curIds[x.id] = true; if (!lastCases[x.id]) newIds.push(x.id); });
   lastCases = curIds;
 
-  var w = cases.filter(function(x) { return x.status === 'triaging' || x.status === 'new'; }).length;
-  var a = cases.filter(function(x) { return x.status === 'dispatched' || x.status === 'en_route' || x.status === 'on_site'; }).length;
+  var w = allCases.filter(function(x) { return x.status === 'triaging' || x.status === 'new'; }).length;
+  var a = allCases.filter(function(x) { return x.status === 'dispatched' || x.status === 'en_route' || x.status === 'on_site'; }).length;
   el('q-wait').textContent = w;
   el('q-active').textContent = a;
 
-  if (!cases.length) { el('queue').textContent = 'Queue empty.'; return; }
+  if (!cases.length) { el('queue').textContent = 'No matching cases.'; return; }
 
   var h = '<table><tr><th>Case</th><th>Customer</th><th>Type</th><th>Age</th><th>Prio</th></tr>';
   cases.forEach(function(x) {
@@ -715,8 +732,7 @@ async function loadQueue() {
   });
   el('queue').innerHTML = h + '</table>';
 
-  // re-open current case to refresh its data
-  if (selCase) { var cr = await api('/api/agent/case?id=' + selCase); if (cr.ok) populateCase(cr.body); }
+  if (selCase) { api('/api/agent/case?id=' + selCase).then(function(cr) { if (cr.ok) populateCase(cr.body); }); }
 }
 
 async function loadStats() {
@@ -953,6 +969,8 @@ async function incoming() {
 let etaTimer = null;
 let etaStartMin = 0;
 let etaStartTime = null;
+let queueFilter = 'all';
+let allCases = [];
 
 function startEtaCountdown(min, prov) {
   stopEtaCountdown();
@@ -1026,6 +1044,30 @@ function psap() {
 (async function() {
   var r = await api('/api/me');
   if (r.body.authenticated && r.body.role === 'agent') enter({ name: r.body.name, staff_role: 'operator', agent_id: '' });
+
+  // Queue filter buttons
+  document.querySelectorAll('#qFilters .qp-filter').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#qFilters .qp-filter').forEach(function(b) { b.classList.remove('on'); b.style.background = 'var(--surface-warm)'; });
+      btn.classList.add('on');
+      btn.style.background = 'var(--accent)';
+      btn.style.color = 'var(--accent-on)';
+      queueFilter = btn.dataset.filter;
+      renderQueue();
+    });
+  });
+
+  // Keyboard shortcuts (CAD standard)
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    var k = e.key.toLowerCase();
+    if (k === 'e') { e.preventDefault(); el('i_type') ? el('i_type').focus() : null; } // Emergency
+    if (k === 'd' && selCase) { e.preventDefault(); dispatch(); } // Dispatch
+    if (k === 'n') { e.preventDefault(); var rows = el('queue').querySelectorAll('tr'); if (rows.length > 1) rows[1].click(); } // Next case
+    if (k === 'a') { e.preventDefault(); incoming(); } // Answer
+    if (k === 'escape') { e.preventDefault(); selCase = null; el('c_no').textContent = 'no case selected'; el('c_cust').textContent = 'Select a case'; } // Close
+    if (k === 'h') { e.preventDefault(); el('popline').innerHTML = '📵 Call on hold'; } // Hold
+  });
 })();
 </script>
 </body></html>
