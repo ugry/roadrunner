@@ -258,8 +258,15 @@ func dispatchWithFallback(ctx context.Context, caseID, service string, forceProv
 		eta := 18 + rand.Intn(25)
 
 		// Try calling the provider API
-		if p.URL != "" {
-			if pe, ok := callProviderURL(ctx, caseID, svc, p.URL); ok {
+		callURL := p.URL
+		if callURL == "" || callURL == "https://api.axa-roadside.example" || callURL == "https://api.towpal.example" {
+			// Fall back to PROVIDER_API_URL env var for the stub service
+			if providerURL != "" {
+				callURL = providerURL
+			}
+		}
+		if callURL != "" {
+			if pe, ok := callProviderURL(ctx, caseID, svc, callURL); ok {
 				recordProviderSuccess(p.ID)
 				if pe > 0 {
 					eta = pe
@@ -359,6 +366,11 @@ func checkProviderHealth(ctx context.Context) {
 	for rows.Next() {
 		var id, url string
 		rows.Scan(&id, &url)
+		if url == "https://api.axa-roadside.example" || url == "https://api.towpal.example" {
+			if providerURL != "" {
+				url = providerURL
+			}
+		}
 		req, _ := http.NewRequestWithContext(ctx, "GET", url+"/health", nil)
 		cl := &http.Client{Timeout: 5 * time.Second}
 		resp, err := cl.Do(req)
