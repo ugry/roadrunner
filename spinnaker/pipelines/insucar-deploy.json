@@ -48,7 +48,7 @@
               "insucar.io/image-tag": "${ (trigger.payload?.parameters?.imageTag ?: parameters.imageTag) ?: 'latest' }"
             },
             "name": "insucar-api",
-            "namespace": "insucar-dev"
+            "namespace": "insucar"
           },
           "spec": {
             "replicas": 2,
@@ -120,7 +120,7 @@
           "kind": "Service",
           "metadata": {
             "name": "insucar-api",
-            "namespace": "insucar-dev"
+            "namespace": "insucar"
           },
           "spec": {
             "ports": [
@@ -143,7 +143,7 @@
               "app": "insucar-worker"
             },
             "name": "insucar-worker",
-            "namespace": "insucar-dev"
+            "namespace": "insucar"
           },
           "spec": {
             "replicas": 2,
