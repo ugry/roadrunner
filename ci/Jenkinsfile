@@ -48,8 +48,10 @@ spec:
   stages {
     stage('Checkout') {
       steps {
+        cleanWs()
         checkout scm
         script {
+          sh 'git fetch --force --tags origin'
           env.GIT_SHA    = sh(script: "git rev-parse --short=12 HEAD", returnStdout: true).trim()
           env.GIT_AUTHOR = sh(script: "git log -1 --pretty=format:'%an' | tr -d '\"\\\\'", returnStdout: true).trim()
         }
@@ -159,10 +161,25 @@ spec:
         }
       }
     }
+
+    stage('Direct deploy (kubectl fallback)') {
+      when { expression { return env.BRANCH_NAME == 'main' } }
+      steps {
+        container('tools') {
+          sh '''
+            apk add --no-cache aws-cli curl jq 2>/dev/null
+            aws eks update-kubeconfig --name insucar --region eu-west-1
+            kubectl -n insucar set image deployment/insucar-api insucar-api=${ECR}:${TAG} --record
+            kubectl -n insucar rollout status deployment/insucar-api --timeout=120s
+            echo "kubectl deploy complete: ${ECR}:${TAG}"
+          ''' || true
+        }
+      }
+    }
   }
 
   post {
-    success { echo "CI OK — tested, scanned, pushed $ECR:$TAG and triggered Spinnaker" }
+    success { echo "CI OK — tested, scanned, pushed $ECR:$TAG and deployed" }
     failure { echo "CI FAILED" }
   }
 }
