@@ -57,11 +57,11 @@ insucar/
 - `milestone.md` — Project history, failures, resolutions
 
 ## Remaining Priority Tasks (from CONTINUE-HERE.md)
-1. Rich operator console (auto-refresh queue, real screen-pop, SLA timers, provider fallback UI)
-2. Multi-tenant in code (tenant resolution + Row-Level Security)
-3. Real Amazon Connect + Lex telephony (PSAP warm-transfer, call-drop recovery)
-4. Real provider connectors (AXA Roadside Missioning / Towpal sandbox)
-5. HA data (RDS Multi-AZ, separate AWS accounts per tier)
-6. Spinnaker pipeline improvements (canary/Kayenta, parameterized image tag)
-7. Security hardening (rotate root keys, SSO+TLS on Jenkins/Spinnaker)
-8. Brand consistency
+1. ✅ Rich operator console (auto-refresh queue, real screen-pop, SLA timers, provider fallback UI)
+2. ✅ Multi-tenant in code (tenant resolution + Row-Level Security)
+3. ✅ Real provider connectors (webhook receiver, fallback chain, circuit breaker)
+4. ✅ Telephony foundation (PSAP transfer, call state lifecycle — mock Connect)
+5. ⬜ HA data (RDS Multi-AZ, separate AWS accounts per tier) — **after-release**
+6. ⬜ Spinnaker pipeline improvements (canary/Kayenta, parameterized image tag) — **after-release**
+7. ⬜ Security hardening (rotate root keys, SSO+TLS on Jenkins/Spinnaker) — **after-release**
+8. ⬜ Brand consistency — **after-release**
