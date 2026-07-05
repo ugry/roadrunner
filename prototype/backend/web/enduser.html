@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Insucar — Sign in</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a7d5a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -270,6 +272,41 @@ if ('serviceWorker' in navigator) {
   }).catch(function(e) { console.log('SW failed:', e); });
 }
 function urlB64ToUint8(b64) { var pad='='.repeat((4-b64.length%4)%4); var raw=atob((b64+pad).replace(/-/g,'+').replace(/_/g,'/')); var out=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i); return out; }
+// Voice-guided assistance (Web Speech API)
+function startVoiceGuidance() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { alert('Voice not supported'); return; }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = new SR(); rec.lang = 'en-US'; rec.interimResults = false;
+  rec.onresult = function(e) { var t = e.results[0][0].transcript.toLowerCase();
+    if (t.includes('breakdown')||t.includes('start')) el('i_type').value='breakdown';
+    if (t.includes('accident')||t.includes('crash')) el('i_type').value='accident';
+    if (t.includes('tyre')||t.includes('flat')) el('i_type').value='flat_tyre';
+    el('i_desc').value = t; nextWiz(2);
+  };
+  rec.onerror = function() { alert('Voice recognition failed'); };
+  rec.start();
+  el('wizSummary').textContent = '🎤 Listening... describe what happened';
+}
+// Audio alerts — 3-tier priority
+var audioCtx = null;
+function playAlert(level) {
+  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  var osc = audioCtx.createOscillator(); var gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  var freqs = { emergency: [880, 660, 440], high: [660, 440], normal: [440] };
+  var freq = (freqs[level]||[440])[0];
+  osc.frequency.value = freq; gain.gain.value = 0.15;
+  osc.start(); setTimeout(function() { osc.stop(); }, level==='emergency'?800:400);
+}
+// Trigger audio on priority events
+document.addEventListener('DOMContentLoaded', function() {
+  var obs = new MutationObserver(function() {
+    var prio = el('i_type').value;
+    if (prio === 'medical_emergency') playAlert('emergency');
+    else if (prio === 'accident') playAlert('high');
+  });
+  var s = el('i_type'); if (s) obs.observe(s, { attributes: true });
+});
 (async()=>{const r=await api('/api/me');if(r.body.authenticated&&r.body.role==='user')enter(r.body);})();
 </script>
 </body></html>
