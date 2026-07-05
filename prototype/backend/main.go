@@ -54,6 +54,7 @@ func main() {
 		initEvents(cfg)
 	}
 	initRedis()
+	initTenants(context.Background())
 	cognito = newCognitoVerifier()
 	if cognito != nil {
 		if err := cognito.refresh(context.Background()); err != nil {
@@ -94,9 +95,9 @@ func main() {
 	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc(opsPath, serveFile("operator.html"))
 
-	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v)",
-		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil)
-	log.Fatal(http.ListenAndServe(":8080", logMW(mux)))
+	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; tenant=%s)",
+		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, defaultTenantID[:8])
+	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(logMW(mux))))
 }
 
 // ---------- infra helpers ----------
