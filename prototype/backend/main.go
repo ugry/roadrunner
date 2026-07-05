@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -80,6 +81,7 @@ func main() {
 	mux.HandleFunc("/api/photo/", handlePhotoServe)
 	mux.HandleFunc("/api/telephony/mock/incoming", handleMockIncoming)
 	mux.HandleFunc("/api/status/", handleStatusPage)
+	mux.HandleFunc("/status/", handleStatusPage) // customer SMS tracking links (STATUS_LINK_BASE)
 	mux.HandleFunc("/api/telephony/mock/psap", handleMockPsap)
 	mux.HandleFunc("/api/telephony/mock/call-state", handleMockCallState)
 	mux.HandleFunc("/api/webhook/provider", handleProviderWebhook)
@@ -126,7 +128,7 @@ func main() {
 
 	log.Printf("listening on :8080 (ops path %s; provider=%q; sms=%v; events=%v; redis=%v; cognito=%v; tenant=%s)",
 		opsPath, providerURL, snsClient != nil, ebClient != nil && eventBus != "", rdb != nil, cognito != nil, defaultTenantID[:min(8, len(defaultTenantID))])
-	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(logMW(mux))))
+	log.Fatal(http.ListenAndServe(":8080", tenantMiddleware(logMW(rateLimitMW(mux)))))
 }
 
 // ---------- infra helpers ----------
@@ -426,13 +428,19 @@ func handleUserCases(w http.ResponseWriter, r *http.Request) {
 	if c, ok := callerFrom(r); ok {
 		uid = c.ID
 	}
-	rows, _ := db.Query(r.Context(),
-		`SELECT id, case_number,status::text,incident::text,coalesce(ca.symptom_description,''),ca.created_at,
+	rows, err := db.Query(r.Context(),
+		`SELECT ca.id, ca.case_number, ca.status::text, ca.incident::text,
+		        coalesce(ca.symptom_description,''), ca.created_at,
 		        coalesce(ca.satisfaction_score,0), coalesce(ca.resolution_notes,''),
 		        coalesce(m.eta_minutes,0)
 		 FROM cases ca
 		 LEFT JOIN missions m ON m.case_id = ca.id AND m.status NOT IN ('failed','cancelled')
 		 WHERE ca.customer_id=$1 ORDER BY ca.created_at DESC`, uid)
+	if err != nil {
+		log.Printf(`{"stream":"error","event":"user_cases_query","err":%q}`, err.Error())
+		writeJSON(w, 500, map[string]string{"error": "could not load cases"})
+		return
+	}
 	defer rows.Close()
 	var out []map[string]any
 	for rows.Next() {
@@ -761,10 +769,28 @@ func handleMockCallState(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// validRequiredService mirrors the PostgreSQL required_service enum so the API
+// rejects bad input with a 400 instead of failing on the enum cast (was a raw 500).
+var validRequiredService = map[string]bool{
+	"jump_start": true, "tyre_change": true, "fuel_delivery": true, "roadside_repair": true,
+	"lockout": true, "ev_charge": true, "tow_recovery": true, "winching": true,
+	"repair_on_spot": true, "vehicle_repatriation": true, "journey_continuation": true,
+	"car_pickup_delivery": true, "tyre_protection": true, "car_swap_ev": true,
+	"service_activated_rsa": true, "micromobility": true,
+}
+
 func handleDispatch(w http.ResponseWriter, r *http.Request) {
 	var in struct{ CaseID, Service, ProviderID string }
 	json.NewDecoder(r.Body).Decode(&in)
 	svc := nz(in.Service, "tow_recovery")
+	if strings.TrimSpace(in.CaseID) == "" {
+		writeJSON(w, 400, map[string]string{"error": "caseID required"})
+		return
+	}
+	if !validRequiredService[svc] {
+		writeJSON(w, 400, map[string]string{"error": "invalid service '" + svc + "' (expected one of the required_service values, e.g. tow_recovery)"})
+		return
+	}
 	publishEvent(r.Context(), "case.dispatch.requested", map[string]any{"case_id": in.CaseID, "service": svc})
 
 	result, err := dispatchWithFallback(r.Context(), in.CaseID, svc, in.ProviderID)
@@ -1120,9 +1146,10 @@ func sendSMS(ctx context.Context, caseID, provider, driver, plate string, eta in
 
 // handleStatusPage serves the live tracking page + JSON API for customer status links
 func handleStatusPage(w http.ResponseWriter, r *http.Request) {
-	token := strings.TrimPrefix(r.URL.Path, "/api/status/")
-	token = strings.TrimSuffix(token, "/")
-	if token == "" {
+	// token is the last path segment — works for both /api/status/<t> and /status/<t>
+	p := strings.TrimSuffix(r.URL.Path, "/")
+	token := p[strings.LastIndex(p, "/")+1:]
+	if token == "" || token == "status" {
 		http.NotFound(w, r)
 		return
 	}
@@ -1179,18 +1206,81 @@ type rateLimitConfig struct {
 }
 
 var rateLimits = map[string]rateLimitConfig{}
+var rlMu sync.RWMutex
+
+// rate-limit counters: fixed 60s window per (path|client-ip). Fail-open.
+type rlWindow struct {
+	start time.Time
+	count int
+}
+
+var (
+	rlCounters = map[string]*rlWindow{}
+	rlCountMu  sync.Mutex
+)
 
 // GAP-1: Persistent rate limits loaded from DB on startup
 func loadRateLimits() {
-	if db == nil { return }
+	if db == nil {
+		return
+	}
 	rows, err := db.Query(context.Background(), `SELECT endpoint, rpm, burst, enabled FROM rate_limits`)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	defer rows.Close()
+	next := map[string]rateLimitConfig{}
 	for rows.Next() {
 		var rl rateLimitConfig
 		rows.Scan(&rl.Endpoint, &rl.RPM, &rl.Burst, &rl.Enabled)
-		rateLimits[rl.Endpoint] = rl
+		next[rl.Endpoint] = rl
 	}
+	rlMu.Lock()
+	rateLimits = next
+	rlMu.Unlock()
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+// rateLimitMW enforces the admin-configured per-endpoint limits (BUG-8).
+// It only applies to exact paths present in the rate_limits table and fails open.
+func rateLimitMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rlMu.RLock()
+		cfg, ok := rateLimits[r.URL.Path]
+		rlMu.RUnlock()
+		if ok && cfg.Enabled && cfg.RPM > 0 {
+			limit := cfg.RPM + cfg.Burst
+			key := r.URL.Path + "|" + clientIP(r)
+			now := time.Now()
+			rlCountMu.Lock()
+			win := rlCounters[key]
+			if win == nil || now.Sub(win.start) >= time.Minute {
+				win = &rlWindow{start: now}
+				rlCounters[key] = win
+			}
+			win.count++
+			over := win.count > limit
+			rlCountMu.Unlock()
+			if over {
+				w.Header().Set("Retry-After", "60")
+				writeJSON(w, 429, map[string]string{"error": "rate limit exceeded — please slow down"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func requireAdmin(next http.HandlerFunc) http.HandlerFunc {
@@ -1231,6 +1321,7 @@ func handleAdminRateLimits(w http.ResponseWriter, r *http.Request) {
 		db.Exec(r.Context(), `INSERT INTO rate_limits(endpoint,rpm,burst,enabled) VALUES($1,$2,$3,$4)
 			ON CONFLICT(endpoint) DO UPDATE SET rpm=$2,burst=$3,enabled=$4,updated_at=now()`,
 			in.Endpoint, in.RPM, in.Burst, in.Enabled)
+		loadRateLimits() // refresh in-memory limits so enforcement reflects the change
 		writeJSON(w, 200, in)
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
@@ -1272,9 +1363,14 @@ func handleAdminApiAccess(w http.ResponseWriter, r *http.Request) {
 func handleAdminOperators(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		rows, _ := db.Query(r.Context(), `
-			SELECT id, email, display_name, agent_id, active, cognito_subject IS NOT NULL as has_cognito
+		rows, err := db.Query(r.Context(), `
+			SELECT id, email, display_name, coalesce(agent_id,''), active, keycloak_subject IS NOT NULL as has_cognito
 			FROM staff ORDER BY display_name`)
+		if err != nil {
+			log.Printf(`{"stream":"error","event":"admin_operators_query","err":%q}`, err.Error())
+			writeJSON(w, 500, map[string]string{"error": "could not load operators"})
+			return
+		}
 		defer rows.Close()
 		var out []map[string]any
 		for rows.Next() {
@@ -1295,10 +1391,15 @@ func handleAdminOperators(w http.ResponseWriter, r *http.Request) {
 			Password    string `json:"password"`
 		}
 		json.NewDecoder(r.Body).Decode(&in)
+		if strings.TrimSpace(in.Email) == "" || strings.TrimSpace(in.AgentID) == "" || len(in.Password) < 8 {
+			writeJSON(w, 400, map[string]string{"error": "email, agent_id and a password (min 8 chars) are required"})
+			return
+		}
 		var id string
 		err := db.QueryRow(r.Context(),
-			`INSERT INTO staff(email,display_name,agent_id,password_hash,active) VALUES($1,$2,$3,$4,true) RETURNING id`,
-			in.Email, in.DisplayName, in.AgentID, sha256hex(in.Password)).Scan(&id)
+			`INSERT INTO staff(email,display_name,agent_id,password_hash,keycloak_subject,role,active)
+			 VALUES($1,$2,$3,$4,$5,'operator',true) RETURNING id`,
+			in.Email, nz(in.DisplayName, in.AgentID), in.AgentID, sha256hex(in.Password), "local:"+in.AgentID).Scan(&id)
 		if err != nil {
 			writeJSON(w, 409, map[string]string{"error": err.Error()})
 			return
@@ -1319,12 +1420,15 @@ func handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM staff`).Scan(&totalStaff)
 	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM cases WHERE status NOT IN ('closed','resolved','cancelled')`).Scan(&activeCases)
 	db.QueryRow(r.Context(), `SELECT COUNT(*) FROM missions`).Scan(&totalMissions)
+	rlMu.RLock()
+	rlCount := len(rateLimits)
+	rlMu.RUnlock()
 	writeJSON(w, 200, map[string]any{
 		"total_customers": totalCustomers,
 		"total_staff":     totalStaff,
 		"active_cases":    activeCases,
 		"total_missions":  totalMissions,
-		"rate_limits":     len(rateLimits),
+		"rate_limits":     rlCount,
 	})
 }
 
