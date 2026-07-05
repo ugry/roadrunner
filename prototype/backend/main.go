@@ -1,6 +1,7 @@
-// Insucar prototype backend (partially functional).
+// Insucar backend — roadside assistance platform.
 // Auth: app-level sessions (HMAC cookie). Users log in by email; agents by agent_id.
 // Telephony: MOCK Amazon Connect. Providers: REAL HTTP connector. SMS: REAL AWS SNS.
+// Multi-tenant: host-based resolution + RLS. Status tracking: live ETA + Leaflet map.
 package main
 
 import (
@@ -788,7 +789,7 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow(r.Context(), `
 		SELECT p.display_name, COALESCE(md.driver_name,''), COALESCE(md.vehicle_plate,''),
 		       COALESCE(m.service,'tow_recovery'), COALESCE(m.eta_minutes,0),
-		       cl.lat, cl.lng
+		       ST_Y(cl.geog::geometry) as lat, ST_X(cl.geog::geometry) as lng
 		FROM notifications n
 		JOIN missions m ON m.case_id = n.case_id
 		JOIN providers p ON p.id = m.provider_id

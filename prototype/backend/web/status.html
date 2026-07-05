@@ -33,7 +33,7 @@ var map = null;
 async function load() {
   try { var r = await fetch('/api/status/' + token); var d = await r.json();
     if (!d || !d.provider) { document.getElementById('app').innerHTML = '<div class="cont"><div class="card"><div class="card-b" style="text-align:center;color:var(--muted)">Status link expired or not found.</div></div></div>'; return; }
-    var etaMin = Math.max(0, Math.round((new Date(d.eta).getTime() - Date.now()) / 60000));
+    var etaMin = d.eta ? Math.max(0, Math.round((new Date(d.eta).getTime() - Date.now()) / 60000)) : (d.eta_minutes || 0);
     var h = '';
     h += '<div class="card"><div class="card-b eta"><div class="eta-num">' + (etaMin > 0 ? etaMin : '<1') + '</div><div class="eta-unit">minutes until arrival</div></div></div>';
     h += '<div class="card"><div id="map"></div></div>';

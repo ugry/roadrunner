@@ -949,7 +949,33 @@ async function incoming() {
   }
 }
 
-// ===== DISPATCH =====
+let etaTimer = null;
+let etaStartMin = 0;
+let etaStartTime = null;
+
+function startEtaCountdown(min, prov) {
+  stopEtaCountdown();
+  if (!min || min <= 0) return;
+  etaStartMin = min;
+  etaStartTime = Date.now();
+  showMission(prov, min, '', '', '');
+  etaTimer = setInterval(function() {
+    var elapsed = Math.round((Date.now() - etaStartTime) / 60000);
+    var remaining = Math.max(0, etaStartMin - elapsed);
+    el('m_eta').textContent = remaining;
+    if (remaining <= 0) {
+      el('m_eta').textContent = 'ARRIVED';
+      el('m_eta').style.color = 'var(--success)';
+      stopEtaCountdown();
+    }
+  }, 5000);
+}
+
+function stopEtaCountdown() {
+  if (etaTimer) { clearInterval(etaTimer); etaTimer = null; }
+  var eta = el('m_eta');
+  if (eta) { eta.style.color = ''; }
+}
 async function dispatch() {
   if (!selCase) return;
   var providers = providersData || [];
@@ -961,7 +987,9 @@ async function dispatch() {
     var r = await api('/api/agent/dispatch', { method: 'POST', body: JSON.stringify(body) });
     if (r.ok) {
       var d = r.body;
-      showMission(d.provider, d.eta_minutes, d.driver ? d.driver.name : '', d.driver ? d.driver.plate : '', d.sms || '');
+      startEtaCountdown(d.eta_minutes, d.provider);
+      if (d.driver && d.driver.name) { el('driverBox').style.display = 'flex'; el('m_drv').textContent = d.driver.name; el('m_plate').textContent = d.driver.plate || ''; el('m_sms').textContent = d.sms || ''; }
+      if (d.provider) updateProviderOnMap(d.provider);
       loadQueue();
       loadProviders();
       return;

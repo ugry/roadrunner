@@ -12,4 +12,4 @@ COPY web /app/web
 EXPOSE 8080
 ENTRYPOINT ["/app/insucar-api"]
 
-# build cache bust: force fresh build v2 — include status page + connector.go
+# cache bust v3 — full rebuild
