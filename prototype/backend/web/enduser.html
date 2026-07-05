@@ -69,15 +69,21 @@
     <div class="card-b">
       <div id="login">
         <h1>Welcome back</h1><div class="sub">Sign in to request assistance and track your case.</div>
-        <label>Email</label><input id="l_email" value="claire.martin@example.fr">
-        <label>Password</label><input id="l_pass" type="password" value="Claire#2026">
+        <label>Email</label><input id="l_email" placeholder="you@example.com">
+        <label>Password</label><input id="l_pass" type="password" placeholder="Your password">
         <button class="btn btn-primary" onclick="login()">Log in</button>
+        <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+          <div style="font-weight:600;font-size:14px;margin-bottom:4px">New to Insucar?</div>
+          <div style="display:flex;gap:8px;justify-content:center">
+            <a href="/register-page" class="btn btn-ghost" style="width:auto;margin-top:0;padding:8px 20px;font-size:13px;text-decoration:none">Create account</a>
+          </div>
+        </div>
         <div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><span class="muted" style="font-size:12px">Stranded? Can't log in?</span><br><a href="tel:+33800000000" style="color:var(--brand);font-weight:700;font-size:14px;text-decoration:none">📞 Call +33 800 000 000</a><br><span class="muted" style="font-size:11px">24/7 emergency line — no login needed</span></div>
         <div id="cognitoLogin" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><button class="btn btn-ghost" onclick="pkceLogin()" style="margin-top:0">Sign in with Cognito</button><div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center">Managed SSO login</div></div>
       </div>
       <div id="reg" class="hidden">
         <h1>Create your account</h1><div class="sub">Register so we already know you and your vehicle when you break down.</div>
-        <div class="row"><div><label>First name</label><input id="r_first" value="New"></div><div><label>Last name</label><input id="r_last" value="Customer"></div></div>
+        <div class="row"><div><label>First name</label><input id="r_first" placeholder="Your first name"></div><div><label>Last name</label><input id="r_last" placeholder="Your last name"></div></div>
         <label>Email</label><input id="r_email" placeholder="you@example.com">
         <div class="row"><div><label>Country</label><select id="r_country"><option>FR</option><option>GB</option><option>DE</option></select></div><div><label>Mobile (E.164)</label><input id="r_phone" placeholder="+33600000009"></div></div>
         <label>Password</label><input id="r_pass" type="password">
