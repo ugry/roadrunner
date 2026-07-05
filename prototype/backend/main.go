@@ -795,6 +795,7 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN mission_driver md ON md.mission_id = m.id
 		LEFT JOIN case_locations cl ON cl.case_id = n.case_id
 		WHERE n.status_link_token = $1
+		   OR n.status_link_token LIKE '%' || $1
 		ORDER BY m.created_at DESC LIMIT 1`, token).
 		Scan(&prov, &drv, &plate, &svc, &etaMin, &lat, &lng)
 	if err != nil {
