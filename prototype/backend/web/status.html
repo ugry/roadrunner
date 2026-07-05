@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Insucar — Help is on the way</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--brand:#0a7d5a;--navy:#0b1f2a;--bg:#f4f8f6;--muted:#5b7183;--surface:#fff;--line:#e3ece8}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--navy);min-height:100vh}
+.top{background:var(--brand);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px}
+.top .pulse{width:12px;height:12px;border-radius:50%;background:#fff;animation:pulse 1.5s ease-in-out infinite}
+.cont{max-width:520px;margin:20px auto;padding:0 16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:14px;box-shadow:0 12px 40px rgba(11,31,42,.06)}
+.card-h{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;font-size:15px}
+.card-b{padding:18px}
+.eta{text-align:center;padding:24px}.eta-num{font-size:56px;font-weight:800;color:var(--brand);line-height:1;letter-spacing:-.03em}.eta-unit{font-size:14px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.1em}
+.driver{display:flex;align-items:center;gap:14px}.driver .avatar{width:52px;height:52px;border-radius:50%;background:var(--brand);display:grid;place-items:center;color:#fff;font-weight:700;font-size:18px;flex-shrink:0}
+.driver .info b{font-size:16px;display:block}.driver .info span{font-size:13px;color:var(--muted);font-family:monospace}
+#map{height:220px;margin:0}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.row:last-child{border-bottom:none}.row .k{color:var(--muted)}.row .v{font-weight:600}
+.loading{text-align:center;padding:40px;color:var(--muted)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+</style></head>
+<body>
+<div class="top"><span class="pulse"></span> Help is on the way</div>
+<div id="app" class="cont"><div class="loading">Loading your rescue details…</div></div>
+<script>
+var token = window.location.pathname.replace('/api/status/','').replace('/status/','');
+var map = null;
+
+async function load() {
+  try { var r = await fetch('/api/status/' + token); var d = await r.json();
+    if (!d || !d.provider) { document.getElementById('app').innerHTML = '<div class="cont"><div class="card"><div class="card-b" style="text-align:center;color:var(--muted)">Status link expired or not found.</div></div></div>'; return; }
+    var etaMin = Math.max(0, Math.round((new Date(d.eta).getTime() - Date.now()) / 60000));
+    var h = '';
+    h += '<div class="card"><div class="card-b eta"><div class="eta-num">' + (etaMin > 0 ? etaMin : '<1') + '</div><div class="eta-unit">minutes until arrival</div></div></div>';
+    h += '<div class="card"><div id="map"></div></div>';
+    h += '<div class="card"><div class="card-b driver"><div class="avatar">' + (d.driver_name||'P').charAt(0) + '</div><div class="info"><b>' + (d.driver_name||'On the way') + '</b><span>' + (d.vehicle_plate||'') + '</span></div></div></div>';
+    h += '<div class="card"><div class="card-h">Trip details</div><div class="card-b">';
+    h += '<div class="row"><span class="k">Provider</span><span class="v">' + (d.provider||'—') + '</span></div>';
+    h += '<div class="row"><span class="k">Service</span><span class="v">' + (d.service||'tow_recovery').replace(/_/g,' ') + '</span></div>';
+    h += '<div class="row"><span class="k">Status</span><span class="v" style="color:var(--brand)">En route</span></div>';
+    h += '</div></div>';
+    document.getElementById('app').innerHTML = h;
+
+    // Init map
+    setTimeout(function() {
+      map = L.map('map', { zoomControl: false, attributionControl: false }).setView([(d.lat||48.856), (d.lng||2.352)], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      L.marker([(d.lat||48.856), (d.lng||2.352)], {
+        icon: L.divIcon({ className: '', html: '<div style="width:16px;height:16px;background:var(--brand);border:3px solid #fff;border-radius:50%"></div>', iconSize: [16,16], iconAnchor: [8,8] })
+      }).addTo(map);
+      if (d.provider_lat) L.marker([d.provider_lat, d.provider_lng||d.lng+0.02], {
+        icon: L.divIcon({ className: '', html: '<div style="width:20px;height:20px;background:#2563eb;border:3px solid #fff;border-radius:50%;box-shadow:0 0 10px #2563eb"></div>', iconSize: [20,20], iconAnchor: [10,10] })
+      }).addTo(map);
+    }, 200);
+
+    // Refresh every 30s
+    setTimeout(load, 30000);
+  } catch(e) { document.getElementById('app').innerHTML = '<div class="cont"><div class="loading">Reconnecting…</div></div>'; setTimeout(load, 5000); }
+}
+load();
+</script></body></html>

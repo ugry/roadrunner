@@ -74,6 +74,7 @@ func main() {
 	// public
 	mux.HandleFunc("/api/register", handleRegister)
 	mux.HandleFunc("/api/telephony/mock/incoming", handleMockIncoming)
+	mux.HandleFunc("/api/status/", handleStatusPage)
 	mux.HandleFunc("/api/telephony/mock/psap", handleMockPsap)
 	mux.HandleFunc("/api/telephony/mock/call-state", handleMockCallState)
 	mux.HandleFunc("/api/webhook/provider", handleProviderWebhook)
@@ -767,6 +768,52 @@ func sendSMS(ctx context.Context, caseID, provider, driver, plate string, eta in
 	db.Exec(ctx, `INSERT INTO notifications(case_id,channel,recipient,template,status,status_link_token)
 		VALUES($1,'sms',$2,'dispatch','sent',$3)`, caseID, *phone, link)
 	return "sent"
+}
+
+// handleStatusPage serves the live tracking page + JSON API for customer status links
+func handleStatusPage(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimPrefix(r.URL.Path, "/api/status/")
+	token = strings.TrimSuffix(token, "/")
+	if token == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "text/html") || !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.ServeFile(w, r, "/app/web/status.html")
+		return
+	}
+	var prov, drv, plate, svc string
+	var etaMin int
+	var lat, lng *float64
+	err := db.QueryRow(r.Context(), `
+		SELECT p.display_name, COALESCE(md.driver_name,''), COALESCE(md.vehicle_plate,''),
+		       COALESCE(m.service,'tow_recovery'), COALESCE(m.eta_minutes,0),
+		       cl.lat, cl.lng
+		FROM notifications n
+		JOIN missions m ON m.case_id = n.case_id
+		JOIN providers p ON p.id = m.provider_id
+		LEFT JOIN mission_driver md ON md.mission_id = m.id
+		LEFT JOIN case_locations cl ON cl.case_id = n.case_id
+		WHERE n.status_link_token = $1
+		ORDER BY m.created_at DESC LIMIT 1`, token).
+		Scan(&prov, &drv, &plate, &svc, &etaMin, &lat, &lng)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "status link not found"})
+		return
+	}
+	resp := map[string]any{
+		"provider":      prov,
+		"driver_name":   drv,
+		"vehicle_plate": plate,
+		"service":       svc,
+		"eta_minutes":   etaMin,
+		"eta":           time.Now().Add(time.Duration(etaMin) * time.Minute).Format(time.RFC3339),
+	}
+	if lat != nil {
+		resp["lat"] = *lat
+		resp["lng"] = *lng
+	}
+	writeJSON(w, 200, resp)
 }
 
 func nz(v, d string) string {

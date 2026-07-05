@@ -6,6 +6,8 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Insucar Operator Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 
 :root {
@@ -267,13 +269,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .subhead { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--space-2); display: flex; align-items: center; gap: 6px; }
 
-/* mini map */
-.map { position: relative; height: 168px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: #0c1220; }
-.map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.map .coords { position: absolute; bottom: 8px; left: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--accent); background: color-mix(in oklab, var(--bg) 80%, transparent); padding: 3px 7px; border: 1px solid var(--border); border-radius: 3px; }
-.map .maptag { position: absolute; top: 8px; right: 8px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
-.pin { transform-origin: center bottom; animation: drop .5s var(--ease-standard); }
-.ping { transform-box: fill-box; transform-origin: center; animation: ping 2.2s ease-out infinite; }
+/* interactive leaflet map */
+#liveMap { border-radius: 4px; }
+.leaflet-control-attribution { font-size: 9px !important; background: rgba(0,0,0,.5) !important; color: #666 !important; }
+.leaflet-container { background: #0c1220 !important; }
 
 /* ---------- DISPATCH ---------- */
 .prov { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; background: var(--surface-warm); border: 1px solid var(--border-soft); margin-bottom: var(--space-2); transition: all var(--motion-fast); cursor: pointer; }
@@ -462,6 +461,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
             <div class="sla-age" id="slaAge" style="display:none;margin-top:12px"><small id="slaAgeLabel">Case age</small><div class="big mono" id="slaAgeVal">--</div><div class="bar"><i id="slaAgeBar" style="width:0%"></i></div></div>
           </div>
         </div>
+        <!-- Interactive map -->
+        <div class="panel" id="mapPanel">
+          <div class="panel-head"><div class="panel-title">📍 Live Map</div><span class="tag" id="mapTag">OSM</span></div>
+          <div class="panel-body" style="padding:0">
+            <div id="liveMap" style="height:280px;background:#0c1220"></div>
+          </div>
+        </div>
 
         <!-- Coverage Decision -->
         <div class="panel" id="coveragePanel" style="display:none">
@@ -536,6 +542,51 @@ let operatorStatus = 'on_call';
 let lastCases = {};  // track known case IDs for change detection
 let queueTimer = null;
 let slaTimer = null;
+let liveMap = null;
+let incidentMarker = null;
+let providerMarker = null;
+
+// ===== MAP =====
+function initMap() {
+  if (liveMap) return;
+  liveMap = L.map('liveMap', { zoomControl: true, attributionControl: true }).setView([46.8182, 2.3470], 6); // France center
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    maxZoom: 19
+  }).addTo(liveMap);
+  // delay resize to fix rendering in hidden panels
+  setTimeout(function() { if (liveMap) liveMap.invalidateSize(); }, 300);
+}
+
+function updateMapFromCase(d) {
+  if (!liveMap) initMap();
+  // Place incident marker from case location data
+  var lat = 48.8566, lng = 2.3522; // default Paris
+  if (d.location && d.location.lat) { lat = parseFloat(d.location.lat); lng = parseFloat(d.location.lng); }
+  else if (d.address) {
+    // Try parsing "Paris" or "Lyon" from address
+    var addr = (d.address || '').toLowerCase();
+    if (addr.includes('lyon')) { lat = 45.7640; lng = 4.8357; }
+    else if (addr.includes('marseille')) { lat = 43.2965; lng = 5.3698; }
+    else if (addr.includes('paris')) { lat = 48.8566; lng = 2.3522; }
+  }
+  if (incidentMarker) liveMap.removeLayer(incidentMarker);
+  incidentMarker = L.marker([lat, lng], {
+    icon: L.divIcon({ className: '', html: '<div style="width:18px;height:18px;background:var(--danger);border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px var(--danger)"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })
+  }).addTo(liveMap);
+  liveMap.setView([lat, lng], 13);
+  el('mapTag').textContent = lat.toFixed(4) + ', ' + lng.toFixed(4);
+}
+
+function updateProviderOnMap(provName, provLat, provLng) {
+  if (!liveMap) return;
+  if (providerMarker) liveMap.removeLayer(providerMarker);
+  if (!provLat) provLat = 48.87; if (!provLng) provLng = 2.33;
+  var popup = L.popup().setContent('<b>' + (provName || 'Provider') + '</b><br>En route');
+  providerMarker = L.marker([provLat, provLng], {
+    icon: L.divIcon({ className: '', html: '<div style="width:22px;height:22px;background:var(--accent);border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px var(--accent)"></div>', iconSize: [22, 22], iconAnchor: [11, 11] })
+  }).bindPopup(popup).addTo(liveMap);
+}
 let providersData = [];
 let statsData = {};
 
@@ -601,6 +652,7 @@ function enter(me){
   loadProviders();
   loadStats();
   startTimers();
+  initMap();
 }
 
 // ===== OPERATOR STATUS =====
@@ -799,6 +851,9 @@ function populateCase(d) {
   el('c_prio').textContent = pr.toUpperCase();
   el('priority').className = 'priority ' + (pr === 'emergency' ? 'emergency' : pr === 'high' ? 'high' : 'normal');
 
+  // Update map with incident location
+  updateMapFromCase({ location: d.location, address: d.symptom_description || '' });
+
   // SLA age bar
   var bar = el('slaAge');
   bar.style.display = 'flex';
@@ -895,14 +950,25 @@ async function incoming() {
 // ===== DISPATCH =====
 async function dispatch() {
   if (!selCase) return;
+  var providers = providersData || [];
   var body = { caseID: selCase, service: selService };
-  if (selProvider) body.providerID = selProvider;
-  var r = await api('/api/agent/dispatch', { method: 'POST', body: JSON.stringify(body) });
-  if (!r.ok) { alert('Dispatch failed: ' + (r.body.error || 'unknown')); return; }
-  var d = r.body;
-  showMission(d.provider, d.eta_minutes, d.driver ? d.driver.name : '', d.driver ? d.driver.plate : '', d.sms || '');
-  loadQueue();
-  loadProviders();
+  
+  // P1-3: provider fallback chain — try providers in ranked order until one accepts
+  for (var i = 0; i < Math.max(providers.length, 1); i++) {
+    if (providers.length > 0) body.providerID = providers[i].id;
+    var r = await api('/api/agent/dispatch', { method: 'POST', body: JSON.stringify(body) });
+    if (r.ok) {
+      var d = r.body;
+      showMission(d.provider, d.eta_minutes, d.driver ? d.driver.name : '', d.driver ? d.driver.plate : '', d.sms || '');
+      loadQueue();
+      loadProviders();
+      return;
+    }
+    // If this provider fails, try the next one
+    console.log('Provider ' + (body.providerID || 'default') + ' failed: ' + (r.body.error || 'unknown') + ' — trying next');
+    el('popline').innerHTML += '<br><span style="color:var(--warn);font-size:12px">⚠ ' + (providers[i] ? providers[i].name : 'Default') + ' unavailable, trying fallback…</span>';
+  }
+  alert('All providers unavailable. Manual dispatch required.');
 }
 
 function showMission(prov, eta, drv, plate, sms) {
@@ -915,6 +981,7 @@ function showMission(prov, eta, drv, plate, sms) {
     el('m_plate').textContent = plate;
     el('m_sms').textContent = sms;
   }
+  if (prov) updateProviderOnMap(prov);
 }
 
 // ===== PSAP =====
