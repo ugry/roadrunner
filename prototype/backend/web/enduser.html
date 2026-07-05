@@ -86,21 +86,18 @@
   <!-- DASHBOARD -->
   <div id="dash" class="hidden">
     <div class="grid2">
-      <div class="card"><div class="card-h"><b>🚨 Request assistance</b></div><div class="card-b">
-        <label>What happened?</label>
-        <select id="i_type"><option value="breakdown">Car won't start</option><option value="accident">Accident</option><option value="flat_tyre">Flat tyre</option><option value="ev_no_charge">EV — no charge</option><option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option></select>
-        <label>Describe it</label><textarea id="i_desc" rows="2" placeholder="engine won't turn over on the A6 near Beaune"></textarea>
-        <label>Location <button type="button" class="btn-ghost" style="margin-top:0;width:auto;padding:4px 10px;font-size:12px;float:right" onclick="getGPSLocation()">📍 Use my location</button></label><input id="i_addr" placeholder="A6 southbound, km 292">
-        <div style="display:flex;gap:8px;margin-top:4px"><input id="i_w3w" placeholder="///what.three.words" style="flex:1;font-family:monospace;font-size:13px"><button type="button" class="btn-ghost" style="width:auto;padding:4px 10px;font-size:11px;margin:0" onclick="reverseGeocode()">📍 w3w</button></div>
-        <label>Photo of scene <span style="font-size:11px;color:var(--muted);font-weight:400">(optional)</span></label>
-        <input type="file" id="i_photo" accept="image/*" capture="environment" onchange="previewPhoto()" style="padding:9px;margin-bottom:8px">
-        <img id="photoPreview" style="display:none;max-width:100%;max-height:200px;border-radius:8px;margin-bottom:10px;border:1px solid var(--line)">
-        <!-- Hold-to-confirm emergency button -->
-        <div id="holdBtn" style="position:relative;margin-top:12px" onmousedown="startHold()" onmouseup="cancelHold()" onmouseleave="cancelHold()" ontouchstart="startHold()" ontouchend="cancelHold()" ontouchcancel="cancelHold()">
-          <button class="btn btn-danger" style="position:relative;z-index:1;pointer-events:none">🚨 Press &amp; hold to request help</button>
-          <div id="holdProgress" style="position:absolute;top:0;left:0;height:100%;background:var(--brand);border-radius:10px;width:0%;transition:none;z-index:0;opacity:0.3"></div>
-        </div>
-      </div></div>
+       <div class="card"><div class="card-h"><b>🚨 Request assistance</b></div><div class="card-b">
+         <!-- 4-step wizard progress -->
+         <div class="wiz-steps"><div class="wiz-step now" id="ws1"></div><div class="wiz-step" id="ws2"></div><div class="wiz-step" id="ws3"></div><div class="wiz-step" id="ws4"></div></div>
+         <!-- Step 1: What happened -->
+         <div id="wizard1"><label for="i_type">What happened?</label><select id="i_type"><option value="breakdown">Car won't start</option><option value="accident">Accident</option><option value="flat_tyre">Flat tyre</option><option value="ev_no_charge">EV — no charge</option><option value="medical_emergency">Driver ill / medical</option><option value="other">Other</option></select><button class="btn btn-primary" onclick="nextWiz(2)">Next →</button></div>
+         <!-- Step 2: Where -->
+         <div id="wizard2" class="hidden"><label for="i_addr">Where are you?</label><input id="i_addr" placeholder="A6 southbound, km 292" aria-label="Location"><button type="button" class="btn-ghost" style="width:auto;padding:4px 10px;font-size:12px;margin:4px 0" onclick="getGPSLocation()">📍 Use GPS</button><input id="i_w3w" placeholder="///what.three.words" style="font-family:monospace;font-size:13px;margin-top:6px" aria-label="what3words"><label for="i_photo">Photo of scene <span style="font-size:11px;color:var(--muted);font-weight:400">(optional)</span></label><input type="file" id="i_photo" accept="image/*" capture="environment" onchange="previewPhoto()" style="padding:9px;margin-bottom:6px"><img id="photoPreview" style="display:none;max-width:100%;max-height:180px;border-radius:8px;margin-bottom:8px;border:1px solid var(--line)"><div class="wiz-nav"><button class="btn btn-ghost" onclick="nextWiz(1)">← Back</button><button class="btn btn-primary" onclick="nextWiz(3)">Next →</button></div></div>
+         <!-- Step 3: Describe -->
+         <div id="wizard3" class="hidden"><label for="i_desc">Describe the situation</label><textarea id="i_desc" rows="3" placeholder="What happened? Any injuries? Is the vehicle in a safe position?" aria-label="Description"></textarea><button class="panic-btn" onclick="panicMode()" aria-label="I don't feel safe — escalate priority"><span style="font-size:18px">🆘</span> I don't feel safe — escalate immediately</button><div class="wiz-nav"><button class="btn btn-ghost" onclick="nextWiz(2)">← Back</button><button class="btn btn-primary" onclick="nextWiz(4)">Next →</button></div></div>
+         <!-- Step 4: Confirm -->
+         <div id="wizard4" class="hidden"><div style="text-align:center;padding:10px 0"><b id="wizSummary" style="font-size:15px"></b></div><div id="holdBtn" style="position:relative;margin-top:8px" onmousedown="startHold()" onmouseup="cancelHold()" onmouseleave="cancelHold()" ontouchstart="startHold()" ontouchend="cancelHold()" ontouchcancel="cancelHold()"><button class="btn btn-danger" style="position:relative;z-index:1;pointer-events:none" aria-label="Press and hold for 3 seconds to request assistance">🚨 Press &amp; hold to request help</button><div id="holdProgress" style="position:absolute;top:0;left:0;height:100%;background:var(--brand);border-radius:10px;width:0%;transition:none;z-index:0;opacity:0.3"></div></div><button class="btn btn-ghost" style="margin-top:8px" onclick="nextWiz(3)">← Back</button></div>
+       </div></div>
       <div class="card"><div class="card-h"><b>My cases</b><span class="pill" id="me2" style="margin-left:auto"></span></div><div class="card-b" style="padding-top:8px"><div id="cases" class="muted">—</div></div></div>
     </div>
   </div>
@@ -179,6 +176,20 @@ function reverseGeocode() {
   if (w3w) { el('i_addr').value = '///' + w3w; el('i_addr').placeholder = 'what3words location set'; }
   else { getGPSLocation(); }
 }
+var wizardStep = 1;
+function nextWiz(n) {
+  wizardStep = n;
+  for (var i=1;i<=4;i++) { var s=el('wizard'+i); s.classList.toggle('hidden', i!==n); var d=el('ws'+i); d.classList.remove('done','now'); if(i<n)d.classList.add('done'); if(i===n)d.classList.add('now'); }
+  if (n===4) el('wizSummary').textContent = (v('i_type')||'help') + ' near ' + (v('i_addr')||'your location') + (v('i_desc')?' — '+v('i_desc').slice(0,60):'');
+}
+function panicMode() {
+  el('i_type').value = 'medical_emergency';
+  nextWiz(4);
+  el('wizSummary').textContent = '⚠ EMERGENCY — help requested immediately';
+  el('wizSummary').style.color = '#e74c3c';
+  wizPanic = true;
+}
+var wizPanic = false;
 
 async function submitIncident() {
   // If photo attached, upload it first
