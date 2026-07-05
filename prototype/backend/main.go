@@ -144,6 +144,7 @@ func main() {
 
 	// auth config (Cognito setup exposed to frontends)
 	mux.HandleFunc("/api/auth/config", handleAuthConfig)
+	mux.HandleFunc("/api/forgot-password", handleForgotPassword)
 
 	// pages (host-based: op.* -> operators only, apex -> users only)
 	mux.HandleFunc("/", handleRoot)
@@ -386,6 +387,33 @@ func handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleForgotPassword builds a Cognito forgot-password URL from env vars and redirects.
+func handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	domain := os.Getenv("COGNITO_CUSTOMER_DOMAIN")
+	clientID := os.Getenv("COGNITO_CUSTOMER_CLIENT_ID")
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		region = "eu-west-1"
+	}
+	if domain == "" || clientID == "" {
+		writeJSON(w, 400, map[string]string{"error": "password reset not configured"})
+		return
+	}
+	state := fmt.Sprintf("%x", sha256.Sum256([]byte(time.Now().String())))[:16]
+	// Derive redirect URI from the request host for per-environment correctness.
+	scheme := "https"
+	if r.TLS == nil {
+		// Allow http fallback for local dev; Cognito app client must allow http://localhost redirects.
+		if h := r.Host; strings.HasPrefix(h, "localhost") || strings.HasPrefix(h, "127.0.0.1") {
+			scheme = "http"
+		}
+	}
+	redirectURI := fmt.Sprintf("%s://%s/app", scheme, r.Host)
+	url := fmt.Sprintf("https://%s.auth.%s.amazoncognito.com/forgotPassword?response_type=code&client_id=%s&redirect_uri=%s&state=%s&scope=openid+email+profile",
+		domain, region, clientID, redirectURI, state)
+	http.Redirect(w, r, url, http.StatusFound)
+}
+
 // ---------- handlers ----------
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if db.Ping(r.Context()) != nil {
@@ -400,7 +428,10 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserLogin(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Email, Password string }
+	var in struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
 	var id, first, last string
 	var hash *string
@@ -501,8 +532,14 @@ func handleCasesAlias(w http.ResponseWriter, r *http.Request) {
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Email, Phone, First, Last, Language, Country, Password string
-		Consents                                              []string
+		Email    string   `json:"email"`
+		Phone    string   `json:"phone"`
+		First    string   `json:"first"`
+		Last     string   `json:"last"`
+		Language string   `json:"language"`
+		Country  string   `json:"country"`
+		Password string   `json:"password"`
+		Consents []string `json:"consents"`
 	}
 	if json.NewDecoder(r.Body).Decode(&in) != nil {
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
@@ -579,7 +616,14 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 	if c, ok := callerFrom(r); ok {
 		uid = c.ID
 	}
-	var in struct{ Incident, Description, Address, Lat, Lng, PhotoID string }
+	var in struct {
+		Incident    string `json:"incident"`
+		Description string `json:"description"`
+		Address     string `json:"address"`
+		Lat         string `json:"lat"`
+		Lng         string `json:"lng"`
+		PhotoID     string `json:"photo_id"`
+	}
 	if json.NewDecoder(r.Body).Decode(&in) != nil {
 		writeJSON(w, 400, map[string]string{"error": "bad json"})
 		return
@@ -833,7 +877,9 @@ func handlePhotoServe(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMockIncoming(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Phone string }
+	var in struct {
+		Phone string `json:"phone"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
 	cidc := fmt.Sprintf("mock-%d", time.Now().UnixNano())
 	m, _, lang, ok := lookupByPhone(r.Context(), in.Phone)
@@ -971,7 +1017,11 @@ var validRequiredService = map[string]bool{
 }
 
 func handleDispatch(w http.ResponseWriter, r *http.Request) {
-	var in struct{ CaseID, Service, ProviderID string }
+	var in struct {
+		CaseID     string `json:"case_id"`
+		Service    string `json:"service"`
+		ProviderID string `json:"provider_id"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
 	svc := nz(in.Service, "tow_recovery")
 	if strings.TrimSpace(in.CaseID) == "" {
@@ -1099,7 +1149,9 @@ func handleAgentStats(w http.ResponseWriter, r *http.Request) {
 
 // AGENT: update operator status (on-call, ACW, offline)
 func handleAgentStatus(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Status string } // on_call, acw, offline
+	var in struct {
+		Status string `json:"status"`
+	} // on_call, acw, offline
 	json.NewDecoder(r.Body).Decode(&in)
 	valid := map[string]bool{"on_call": true, "acw": true, "offline": true}
 	if !valid[in.Status] {
@@ -1131,7 +1183,10 @@ func getSmsStep(idx int) (string, string) {
 }
 
 func handleSmsJourney(w http.ResponseWriter, r *http.Request) {
-	var in struct{ CaseID, Step string }
+	var in struct {
+		CaseID string `json:"case_id"`
+		Step   string `json:"step"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
 	if in.CaseID == "" || in.Step == "" {
 		writeJSON(w, 400, map[string]string{"error": "caseID and step required"})
@@ -1200,7 +1255,11 @@ func handleSmsJourney(w http.ResponseWriter, r *http.Request) {
 
 // Case rating: customer rates service after case resolved.
 func handleCaseRate(w http.ResponseWriter, r *http.Request) {
-	var in struct{ CaseID string; Score int; Comment string }
+	var in struct {
+		CaseID  string `json:"case_id"`
+		Score   int    `json:"score"`
+		Comment string `json:"comment"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
 	if in.CaseID == "" || in.Score < 1 || in.Score > 5 {
 		writeJSON(w, 400, map[string]string{"error": "caseID and score (1-5) required"})
@@ -1257,7 +1316,9 @@ func handlePushSend(w http.ResponseWriter, r *http.Request) {
 
 // Case arrived: motorist confirms provider has arrived on scene.
 func handleCaseArrived(w http.ResponseWriter, r *http.Request) {
-	var in struct{ CaseID string }
+	var in struct {
+		CaseID string `json:"case_id"`
+	}
 	json.NewDecoder(r.Body).Decode(&in)
 	uid := ""
 	if c, ok := callerFrom(r); ok { uid = c.ID }

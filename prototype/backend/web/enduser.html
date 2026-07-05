@@ -72,7 +72,7 @@
         <label>Email</label><input id="l_email" placeholder="you@example.com">
         <label>Password</label><input id="l_pass" type="password" placeholder="Your password">
         <button class="btn btn-primary" onclick="login()">Log in</button>
-        <div style="text-align:right;margin-top:6px"><a href="https://insucar-dev-customer.auth.eu-west-1.amazoncognito.com/forgotPassword?client_id=7n33nbhutvt7r3fia98bcksbt0&redirect_uri=https://unysolar.com/app" target="_blank" style="font-size:12px;color:var(--muted);text-decoration:none">Forgot your password?</a></div>
+        <div style="text-align:right;margin-top:6px"><a href="#" onclick="forgotPassword();return false" style="font-size:12px;color:var(--muted);text-decoration:none">Forgot your password?</a></div>
         <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
           <div style="font-weight:600;font-size:14px;margin-bottom:4px">New to Insucar?</div>
           <div style="display:flex;gap:8px;justify-content:center">
@@ -121,6 +121,22 @@
 // --- Cognito config (populated by backend or env; empty = no Cognito login) ---
 const cognitoCfg = { domain: '', region: 'eu-west-1', clientId: '', redirectUri: location.origin + '/app/callback' };
 (async () => { try { const r = await fetch('/api/auth/config'); if (r.ok) { const c = await r.json(); if (c.customerDomain) { cognitoCfg.domain = c.customerDomain; cognitoCfg.region = c.region; cognitoCfg.clientId = c.customerClientId; document.getElementById('cognitoLogin').classList.remove('hidden'); } } } catch (_) {} })();
+
+function forgotPassword() {
+    var cfg = cognitoCfg; // already populated from /api/auth/config
+    if (!cfg.domain || !cfg.clientId) {
+        location.href = '/api/forgot-password';
+        return;
+    }
+    var state = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b) { return b.toString(16).padStart(2,'0'); }).join('');
+    var url = 'https://' + cfg.domain + '.auth.' + cfg.region + '.amazoncognito.com/forgotPassword' +
+        '?response_type=code' +
+        '&client_id=' + encodeURIComponent(cfg.clientId) +
+        '&redirect_uri=' + encodeURIComponent(location.origin + '/app') +
+        '&state=' + state +
+        '&scope=openid+email+profile';
+    location.href = url;
+}
 
 function pkceLogin() {
   const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => String.fromCharCode('A'.charCodeAt(0)+b%26)).join('');
