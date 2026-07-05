@@ -1007,10 +1007,12 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 	var prov, drv, plate, svc string
 	var etaMin int
 	var lat, lng *float64
+	var provPhoto, provRating *string
 	err := db.QueryRow(r.Context(), `
 		SELECT p.display_name, COALESCE(md.driver_name,''), COALESCE(md.vehicle_plate,''),
 		       COALESCE(m.service,'tow_recovery'), COALESCE(m.eta_minutes,0),
-		       ST_Y(cl.geog::geometry) as lat, ST_X(cl.geog::geometry) as lng
+		       ST_Y(cl.geog::geometry) as lat, ST_X(cl.geog::geometry) as lng,
+		       md.photo_url, p.performance_score::text
 		FROM notifications n
 		JOIN missions m ON m.case_id = n.case_id
 		JOIN providers p ON p.id = m.provider_id
@@ -1019,18 +1021,20 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 		WHERE n.status_link_token = $1
 		   OR n.status_link_token LIKE '%' || $1
 		ORDER BY m.created_at DESC LIMIT 1`, token).
-		Scan(&prov, &drv, &plate, &svc, &etaMin, &lat, &lng)
+		Scan(&prov, &drv, &plate, &svc, &etaMin, &lat, &lng, &provPhoto, &provRating)
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "status link not found"})
 		return
 	}
 	resp := map[string]any{
-		"provider":      prov,
-		"driver_name":   drv,
-		"vehicle_plate": plate,
-		"service":       svc,
-		"eta_minutes":   etaMin,
-		"eta":           time.Now().Add(time.Duration(etaMin) * time.Minute).Format(time.RFC3339),
+		"provider":        prov,
+		"driver_name":     drv,
+		"vehicle_plate":   plate,
+		"service":         svc,
+		"eta_minutes":     etaMin,
+		"eta":             time.Now().Add(time.Duration(etaMin) * time.Minute).Format(time.RFC3339),
+		"provider_photo":  s(provPhoto),
+		"provider_rating": s(provRating),
 	}
 	if lat != nil {
 		resp["lat"] = *lat

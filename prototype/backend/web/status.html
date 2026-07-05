@@ -38,6 +38,8 @@ async function load() {
     h += '<div class="card"><div class="card-b eta"><div class="eta-num">' + (etaMin > 0 ? etaMin : '<1') + '</div><div class="eta-unit">minutes until arrival</div></div></div>';
     h += '<div class="card"><div id="map"></div></div>';
     h += '<div class="card"><div class="card-b driver"><div class="avatar">' + (d.driver_name||'P').charAt(0) + '</div><div class="info"><b>' + (d.driver_name||'On the way') + '</b><span>' + (d.vehicle_plate||'') + '</span></div></div></div>';
+    if (d.provider_photo) h += '<div class="card"><div class="card-b" style="text-align:center"><img src="' + d.provider_photo + '" style="max-width:100%;border-radius:8px;max-height:200px" alt="Provider photo"></div></div>';
+    if (d.provider_rating) h += '<div class="card"><div class="card-b" style="text-align:center"><span style="color:#f5a623;font-size:20px">' + '★'.repeat(Math.round(d.provider_rating/2)) + '</span><span style="font-size:13px;color:var(--muted)"> ' + (d.provider_rating||0).toFixed(1) + '/10</span></div></div>';
     h += '<div class="card"><div class="card-h">Trip details</div><div class="card-b">';
     h += '<div class="row"><span class="k">Provider</span><span class="v">' + (d.provider||'—') + '</span></div>';
     h += '<div class="row"><span class="k">Service</span><span class="v">' + (d.service||'tow_recovery').replace(/_/g,' ') + '</span></div>';

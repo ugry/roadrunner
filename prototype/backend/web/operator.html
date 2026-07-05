@@ -534,6 +534,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
           </div>
           <div class="panel-body" style="padding:8px;padding-top:0">
             <button class="btn btn-primary" id="dispatchBtn" disabled onclick="dispatch()">🚚 Dispatch to selected</button>
+            <!-- Quick-action macro buttons -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px">
+              <button class="btn btn-ghost" style="font-size:11px;padding:6px 8px;margin:0" onclick="quickAction('sms_arriving')">📱 SMS: 5 min away</button>
+              <button class="btn btn-ghost" style="font-size:11px;padding:6px 8px;margin:0" onclick="quickAction('sms_arrived')">📍 SMS: Arrived</button>
+              <button class="btn btn-ghost" style="font-size:11px;padding:6px 8px;margin:0" onclick="quickAction('resolve')">✅ Resolve case</button>
+              <button class="btn btn-ghost" style="font-size:11px;padding:6px 8px;margin:0" onclick="quickAction('call_customer')">📞 Call customer</button>
+            </div>
             <div class="mission-eta" id="missionBox" style="display:none;margin-top:12px"><span class="big mono" id="m_eta">--</span><span class="unit">min ETA</span><div class="lab"><small>Provider</small><b id="m_prov">—</b></div></div>
             <div class="driver" id="driverBox" style="display:none"><div class="dphoto">PL<div class="verified">✓</div></div><div class="dinfo"><b id="m_drv">—</b><small id="m_plate">—</small><span class="rate">SMS <span id="m_sms">—</span></span></div></div>
             <!-- Mission timeline -->
@@ -1062,6 +1069,19 @@ function showMission(prov, eta, drv, plate, sms) {
     el('m_sms').textContent = sms;
   }
   if (prov) updateProviderOnMap(prov);
+}
+
+async function quickAction(action) {
+  if (!selCase) return;
+  var stepMap = { sms_arriving: 'arriving', sms_arrived: 'arrived', resolve: 'resolved' };
+  var step = stepMap[action];
+  if (step) {
+    var r = await api('/api/agent/sms-journey', { method: 'POST', body: JSON.stringify({ caseID: selCase, step: step }) });
+    if (r.ok) { el('popline').innerHTML = '✅ SMS sent: ' + step; loadQueue(); }
+  }
+  if (action === 'call_customer') {
+    el('popline').innerHTML = '📞 Initiating call to customer (mock)';
+  }
 }
 
 // ===== PSAP =====
