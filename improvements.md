@@ -339,4 +339,62 @@ Priority: P0=Blocker, P1=Critical, P2=Important, P3=Nice-to-have
 
 ---
 
-*Document maintained by QA Engineering. Update on each test cycle.*
+## §7: EXPERT ROLE-PLAY FINDINGS (2026-07-05)
+
+Added from `expertobservations.md` — 3-perspective empathy walkthrough.
+
+### End-User Scores (Claire Martin, stranded on A6)
+
+| Step | What Happens | Score | Emotional State |
+|---|---|---|---|
+| 1. Land on site | Beautiful marketing page, "Get help now" button exists but competes with "Log in" | 6/10 | Confused — "which button do I press?" |
+| 2. Login | Works for known users. No guest/passenger path. | 7/10 | Frustrated — "I need help, not a login form" |
+| 3. Request help | 6-step form: dropdown + textarea + address + button + alert. Too many actions in distress. | 4/10 | Anxious — "what if I type wrong?" |
+| 4. Wait | Static card showing "triaging". No ETA, no driver, no map, no updates. | 2/10 | Escalating anxiety — "is anyone actually coming?" |
+| 5. Provider arrives | Nothing. No confirmation. No rating. | 0/10 | Abandoned — "did it even work?" |
+| **Overall** | | **3.5/10** | Trust loop broken after submission |
+
+### Operator Scores (Amelie Durand, dispatch)
+
+| Step | What Happens | Score |
+|---|---|---|
+| 1. Login | Dark console, identity display, SLA counters — professional | 8/10 |
+| 2. Incoming call | Screen-pop auto-bind works, coverage shown, providers listed | 7/10 |
+| 3. Triage | 5 yes/no buttons visible but DON'T save to DB or change priority | 4/10 |
+| 4. Coverage | Shows coverage text but doesn't enforce entitlement checks vs selected service | 6/10 |
+| 5. Dispatch | Works end-to-end. Driver info now persists after fix | 7/10 |
+| 6. Monitor | Dispatched cases vanish from view. No live mission monitoring | 3/10 |
+| **Overall** | | **6/10** |
+
+### 7 Immediate P0 Fixes From Expert Analysis
+
+| # | Issue | Fix Summary | Effort |
+|---|---|---|---|
+| X1 | Post-submission silent | Tracking view with ETA + driver + map replacing static card | 3h |
+| X2 | GPS not auto-detected | Call getGPSLocation() in enter() on dashboard load | 15m |
+| X3 | alert() blocks mobile | Inline green confirmation banner | 20m |
+| X4 | No login bypass | "Can't log in? Call us" phone link above login form | 10m |
+| X5 | No mission monitoring | "Active Missions" panel for dispatched cases | 4h |
+| X6 | Triage not functional | Wire buttons to DB + auto-escalate priority | 3h |
+| X7 | Duplicate cases | Check existing open case for caller's ANI before creating new | 2h |
+
+### Architecture Weaknesses Identified
+
+| # | Weakness | Severity |
+|---|---|---|
+| 1 | No WebSocket/real-time layer — polling only | HIGH |
+| 2 | Single Go monolith — splitting into services becomes harder over time | MEDIUM |
+| 3 | No API versioning — breaking response changes affect all clients | MEDIUM |
+| 4 | No rate limiting on API endpoints | HIGH |
+| 5 | No backend input validation — accepts any JSON shape | MEDIUM |
+| 6 | In-cluster Postgres (not managed RDS) — no automated backups/PITR | HIGH |
+| 7 | Redis not configured — `redis=false` in logs | MEDIUM |
+| 8 | Mock telephony only — Amazon Connect not provisioned | HIGH |
+| 9 | Operator URL committed in source code — not truly hidden | LOW |
+
+### Overall Readiness Score: 5.5/10
+"It works" ≠ "It helps." Platform functions technically but the emotional experience — the trust loop between requesting help and receiving it — is broken after the submission step.
+
+---
+
+*Document maintained by QA Engineering. Last updated: 2026-07-05 with expert role-play findings.*
