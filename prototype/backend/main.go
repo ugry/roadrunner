@@ -412,6 +412,13 @@ func handleAgentCase(w http.ResponseWriter, r *http.Request) {
 	var mid *string
 	db.QueryRow(r.Context(), `SELECT m.id,m.eta_minutes,p.display_name FROM missions m JOIN providers p ON p.id=m.provider_id
 		WHERE m.case_id=$1 ORDER BY m.created_at DESC LIMIT 1`, id).Scan(&mid, &eta, &prov)
+	// driver info for active mission
+	var drvName, drvPlate *string
+	if mid != nil && *mid != "" {
+		db.QueryRow(r.Context(),
+			`SELECT driver_name, vehicle_plate FROM mission_driver WHERE mission_id=$1 LIMIT 1`, *mid).
+			Scan(&drvName, &drvPlate)
+	}
 	// mission timeline events
 	var timeline []map[string]any
 	if mid != nil && *mid != "" {
@@ -446,7 +453,7 @@ func handleAgentCase(w http.ResponseWriter, r *http.Request) {
 			"excess": excess, "callout_limit": calloutLimit,
 		},
 		"vehicle": map[string]any{"plate": s(plate), "make": s(mk), "model": s(model)},
-		"mission": map[string]any{"id": s(mid), "provider": s(prov), "eta_minutes": eta, "timeline": timeline},
+		"mission": map[string]any{"id": s(mid), "provider": s(prov), "eta_minutes": eta, "timeline": timeline, "driver": map[string]any{"name": s(drvName), "plate": s(drvPlate)}},
 		"safety": map[string]any{
 			"everyone_safe": safe, "in_live_traffic": inTraffic,
 			"on_hard_shoulder": onShoulder, "vulnerable_occupants": vulnerable,

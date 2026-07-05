@@ -895,7 +895,8 @@ function populateCase(d) {
 
   // Mission data
   if (d.mission && d.mission.provider) {
-    showMission(d.mission.provider, d.mission.eta_minutes, '', '', '');
+    var drv = d.mission.driver || {};
+    showMission(d.mission.provider, d.mission.eta_minutes, drv.name || '', drv.plate || '', '');
     // timeline
     if (d.mission.timeline && d.mission.timeline.length) {
       renderTimeline(d.mission.timeline);
