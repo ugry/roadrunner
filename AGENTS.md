@@ -56,6 +56,63 @@ insucar/
 - `build-notes.md` — Architectural decisions
 - `milestone.md` — Project history, failures, resolutions
 
+## Agent Team (AI Agents + Human PO)
+
+The project is managed by a team of 4 specialized AI agents coordinated by the Orchestrator, with a human Product Owner as the final gate.
+
+```
+                    ┌──────────────────────────────┐
+                    │     HUMAN PRODUCT OWNER      │
+                    │  (Final PROD approver only)  │
+                    └──────────────┬───────────────┘
+                                   │ PROD judgment
+                    ┌──────────────┴───────────────┐
+                    │       ORCHESTRATOR           │
+                    │  (insucar / insucar-orchestrator) │
+                    │  Coordinates team, manages   │
+                    │  CI/CD, approves DEV→UAT     │
+                    └──┬─────────┬──────────┬──────┘
+                       │         │          │
+              ┌────────┴──┐ ┌────┴─────┐ ┌─┴──────────┐
+              │ DEVELOPER │ │  TESTER  │ │ RESEARCHER │
+              │ writes     │ │ tests    │ │ analyzes   │
+              │ code       │ │ QA       │ │ researches │
+              │ commits    │ │ issues   │ │ reports    │
+              └───────────┘ └──────────┘ └────────────┘
+```
+
+| Agent | File | Role | Key Permissions |
+|-------|------|------|----------------|
+| **Orchestrator** | `.opencode/agents/insucar.md` | Project coordinator, CI/CD manager, DEV→UAT approver | edit, bash, task |
+| **Developer** | `.opencode/agents/insucar-developer.md` | Writes Go/HTML/JS, commits, pushes, triggers builds | edit, bash |
+| **Tester** | `.opencode/agents/insucar-tester.md` | Tests APIs/UI, files GitHub issues, verifies deploys | bash, webfetch |
+| **Researcher** | `.opencode/agents/insucar-researcher.md` | Competitor analysis, security research, tech trends | websearch, webfetch |
+| **Human PO** | You | Final PROD approver in Spinnaker | Spinnaker Deck |
+
+### Spinnaker Approval Rules
+
+| Stage | Approver | Automation |
+|-------|----------|-----------|
+| Deploy DEV | Spinnaker trigger | Auto (Jenkins webhook) |
+| Promote to UAT? | **Orchestrator** | Auto (continuous after DEV success) |
+| Deploy UAT | Spinnaker | Auto |
+| Promote to PROD? | **Human PO** | Manual only — wait for human |
+| Deploy PROD | Spinnaker | Auto (after human approval) |
+
+### Workflow Example
+
+```
+Task: "Fix login bug"
+  1. Orchestrator → Researcher: "Investigate login flow, find root cause"
+  2. Researcher → Orchestrator: "Found Cognito pool mismatch + cookie issue"
+  3. Orchestrator → Developer: "Fix cognito.go + enduser.html per research"
+  4. Developer → Orchestrator: "✅ Pushed commit abc123"
+  5. Orchestrator: Trigger Jenkins → SUCCESS → Approve UAT → Notify human
+  6. Orchestrator → Tester: "Verify login flow on UAT"
+  7. Tester → Orchestrator: "✅ All 7 tests pass"
+  8. Human → Spinnaker: Approve PROD → Deploy
+```
+
 ## Remaining Priority Tasks (from CONTINUE-HERE.md)
 1. ✅ Rich operator console (auto-refresh queue, real screen-pop, SLA timers, provider fallback UI)
 2. ✅ Multi-tenant in code (tenant resolution + Row-Level Security)
