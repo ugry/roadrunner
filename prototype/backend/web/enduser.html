@@ -243,6 +243,8 @@ async function loadCases(){const r=await api('/api/user/cases');const c=r.body.c
   if(x.description) h+='<div class="case-desc">'+esc(x.description)+'</div>';
   if(x.status==='dispatched'||x.status==='en_route'){
     h+='<button class="btn btn-primary" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="confirmArrival(\''+x.id+'\')">✅ Provider has arrived</button>';
+    h+='<div style="margin-top:4px"><input type="file" accept="image/*" capture="environment" style="font-size:11px;width:auto" onchange="uploadPostPhoto(\''+x.id+'\',this)" aria-label="Add photo after submission"><span style="font-size:10px;color:var(--muted)"> Add photo</span></div>';
+    h+='<span class="pill" style="background:#e6f4ee;color:var(--brand);margin-left:4px;font-size:10px">✓ Verified provider</span>';
   }
   if(x.status==='resolved'&&!rated){
     h+='<div class="rating" style="margin-top:8px;display:flex;gap:4px">';
@@ -262,6 +264,13 @@ async function confirmArrival(caseId) {
   var r = await api('/api/case/arrived', { method: 'POST', body: JSON.stringify({ caseID: caseId }) });
   if (r.ok) { alert('✅ Arrival confirmed. Thank you!'); loadCases(); }
   else alert('Failed: ' + (r.body.error || ''));
+}
+async function uploadPostPhoto(caseId, input) {
+  var file = input.files[0]; if (!file) return;
+  var fd = new FormData(); fd.append('photo', file);
+  var r = await fetch('/api/upload/photo', { method: 'POST', body: fd, credentials: 'include' });
+  if (r.ok) { alert('Photo uploaded!'); loadCases(); }
+  else alert('Upload failed');
 }
 // Service Worker for push notifications
 if ('serviceWorker' in navigator) {
