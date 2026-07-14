@@ -3,13 +3,12 @@
   "agent": {
     "build": {
       "mode": "primary",
-      "prompt": "{file:./.opencode/agents/insucar.md}",
+      "prompt": "{file:./.opencode/agents/roadrunner.md}",
       "permission": {
         "edit": "allow",
         "bash": "allow",
         "task": "allow",
         "webfetch": "allow",
-        "websearch": "allow",
         "read": "allow",
         "glob": "allow",
         "grep": "allow",

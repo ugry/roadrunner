@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Insucar — Sign in</title>
+<title>Roadrunner — Sign in</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a7d5a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,7 +54,7 @@
 <body>
 <div class="bar">
   <svg class="logo" viewBox="0 0 80 80" aria-hidden="true"><defs><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#12a06f"/><stop offset="1" stop-color="#0a7d5a"/></linearGradient></defs><path d="M40 3 L73 15 V40 C73 57 60 69 40 77 C20 69 7 57 7 40 V15 Z" fill="url(#s)"/><path d="M23 63 L36 25 H44 L57 63 Z" fill="#fff" opacity=".92"/><g transform="translate(40,23)"><path d="M0 -12 C6.6 -12 11 -7.6 11 -1.5 C11 5.5 0 14 0 14 C0 14 -11 5.5 -11 -1.5 C-11 -7.6 -6.6 -12 0 -12 Z" fill="#f5a623"/><circle cy="-1.5" r="4" fill="#0b1f2a"/></g></svg>
-  <div class="wm">Insu<span>car</span></div>
+  <div class="wm">Road<span>runner</span></div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
     <span class="who" id="whoami"></span>
     <button id="loginTop" class="topbtn" onclick="showTab('login')">Log in</button>
@@ -67,22 +67,28 @@
   <div class="card" id="authcard">
     <div class="card-h"><div class="tabs"><span id="tabLogin" class="tabx on" onclick="showTab('login')">Log in</span><span id="tabReg" class="tabx" onclick="showTab('reg')">Register</span></div><span class="pill" style="margin-left:auto">unysolar.com</span></div>
     <div class="card-b">
-      <div id="login">
-        <h1>Welcome back</h1><div class="sub">Sign in to request assistance and track your case.</div>
-        <label>Email</label><input id="l_email" placeholder="you@example.com">
-        <label>Password</label><input id="l_pass" type="password" placeholder="Your password">
-        <button class="btn btn-primary" onclick="login()">Log in</button>
-        <div style="text-align:right;margin-top:6px"><a href="#" onclick="forgotPassword();return false" style="font-size:12px;color:var(--muted);text-decoration:none">Forgot your password?</a></div>
-        <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
-          <div style="font-weight:600;font-size:14px;margin-bottom:4px">New to Insucar?</div>
-          <div style="display:flex;gap:8px;justify-content:center">
-            <a href="/register-page" class="btn btn-ghost" style="width:auto;margin-top:0;padding:8px 20px;font-size:13px;text-decoration:none">Create account</a>
-          </div>
-        </div>
-        <div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><span class="muted" style="font-size:12px">Stranded? Can't log in?</span><br><a href="tel:+33800000000" style="color:var(--brand);font-weight:700;font-size:14px;text-decoration:none">📞 Call +33 800 000 000</a><br><span class="muted" style="font-size:11px">24/7 emergency line — no login needed</span></div>
-        <div id="cognitoLogin" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><button class="btn btn-ghost" onclick="pkceLogin()" style="margin-top:0">Sign in with Cognito</button><div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center">Managed SSO login</div></div>
-      </div>
-      <div id="reg" class="hidden">
+       <div id="login">
+         <h1>Welcome back</h1><div class="sub">Sign in to request assistance and track your case.</div>
+         <label>Email</label><input id="l_email" placeholder="you@example.com" autocomplete="username">
+         <label>Password</label><input id="l_pass" type="password" placeholder="Your password" autocomplete="current-password">
+         <button class="btn btn-primary" onclick="login()">Sign in</button>
+         <div style="text-align:right;margin-top:8px"><a href="#" onclick="showForgotPassword();return false" style="font-size:13px;color:var(--muted);text-decoration:none;font-weight:600">Forgot your password?</a></div>
+         <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+           <div style="font-weight:600;font-size:14px;margin-bottom:4px">New to Roadrunner?</div>
+           <div style="display:flex;gap:8px;justify-content:center">
+             <span class="tabx" onclick="showTab('reg')" style="cursor:pointer;font-size:13px;display:inline-block;padding:8px 20px;border-radius:10px;background:#eef4f1;font-weight:700">Create account</span>
+           </div>
+         </div>
+         <div id="cognitoLogin" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><button class="btn btn-ghost" onclick="pkceLogin()" style="margin-top:0">Sign in with Cognito</button><div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center">Managed SSO login</div></div>
+       </div>
+       <div id="forgotpw" class="hidden">
+         <h1>Reset your password</h1><div class="sub">Enter your email and we'll send you a secure reset link.</div>
+         <label>Email</label><input id="f_email" placeholder="you@example.com" autocomplete="username">
+         <button class="btn btn-primary" onclick="sendForgotEmail()">Send Reset Link</button>
+         <div id="fmsg" style="margin-top:10px;font-size:13px;text-align:center"></div>
+         <div style="text-align:center;margin-top:12px"><a href="#" onclick="showForgotPassword();return false" style="font-size:13px;color:var(--muted);text-decoration:none">← Back to sign in</a></div>
+       </div>
+       <div id="reg" class="hidden">
         <h1>Create your account</h1><div class="sub">Register so we already know you and your vehicle when you break down.</div>
         <div class="row"><div><label>First name</label><input id="r_first" placeholder="Your first name"></div><div><label>Last name</label><input id="r_last" placeholder="Your last name"></div></div>
         <label>Email</label><input id="r_email" placeholder="you@example.com">
@@ -122,20 +128,26 @@
 const cognitoCfg = { domain: '', region: 'eu-west-1', clientId: '', redirectUri: location.origin + '/app/callback' };
 (async () => { try { const r = await fetch('/api/auth/config'); if (r.ok) { const c = await r.json(); if (c.customerDomain) { cognitoCfg.domain = c.customerDomain; cognitoCfg.region = c.region; cognitoCfg.clientId = c.customerClientId; document.getElementById('cognitoLogin').classList.remove('hidden'); } } } catch (_) {} })();
 
-function forgotPassword() {
-    var cfg = cognitoCfg; // already populated from /api/auth/config
-    if (!cfg.domain || !cfg.clientId) {
-        location.href = '/api/forgot-password';
-        return;
+function showForgotPassword() {
+    var loginEl = el('login'), forgotEl = el('forgotpw');
+    if (forgotEl.classList.contains('hidden')) {
+        loginEl.classList.add('hidden');
+        forgotEl.classList.remove('hidden');
+        el('f_email').value = v('l_email') || '';
+        el('fmsg').innerHTML = '';
+    } else {
+        loginEl.classList.remove('hidden');
+        forgotEl.classList.add('hidden');
     }
-    var state = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b) { return b.toString(16).padStart(2,'0'); }).join('');
-    var url = 'https://' + cfg.domain + '.auth.' + cfg.region + '.amazoncognito.com/forgotPassword' +
-        '?response_type=code' +
-        '&client_id=' + encodeURIComponent(cfg.clientId) +
-        '&redirect_uri=' + encodeURIComponent(location.origin + '/app') +
-        '&state=' + state +
-        '&scope=openid+email+profile';
-    location.href = url;
+}
+async function sendForgotEmail() {
+    var email = (v('f_email')||'').trim(), m = el('fmsg');
+    if (!email || email.indexOf('@') < 0) { m.innerHTML='<span style="color:#c0392b">Valid email required</span>'; return; }
+    m.innerHTML='<span style="color:var(--muted)">Sending reset link…</span>';
+    var r = await fetch('/api/send-reset-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
+    var b = await r.json();
+    if (r.ok) { m.innerHTML='<span style="color:var(--brand)">Reset link sent! Check your inbox.</span>'; }
+    else { m.innerHTML='<span style="color:#c0392b">'+b.error+'</span>'; }
 }
 
 function pkceLogin() {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Roadrunner" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#0a7d5a</item>
+        <item name="colorPrimaryDark">#086a4d</item>
+        <item name="colorAccent">#f5a623</item>
+        <item name="android:statusBarColor">#086a4d</item>
+    </style>
+</resources>

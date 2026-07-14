@@ -10,6 +10,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/smtp"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -30,6 +33,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	resendAPIKey  = os.Getenv("RESEND_API_KEY")
+	resendFrom    = getenv("RESEND_FROM", "Roadrunner <noreply@unygms.com>")
+	appBaseURL    = getenv("APP_BASE_URL", "http://localhost:8080")
+	smtpHost      = getenv("SMTP_HOST", "smtp.hostinger.com")
+	smtpPort      = getenv("SMTP_PORT", "465")
+	smtpUser      = getenv("SMTP_USER", "ugur.yardimci@unygms.com")
+	smtpPass      = getenv("SMTP_PASS", "")
 )
 
 var (
@@ -142,9 +155,12 @@ func main() {
 	mux.HandleFunc("/api/agent/predict-eta", requireRole("agent", handlePredictEta))
 	mux.HandleFunc("/api/agent/safety-triage", requireRole("agent", handleSafetyTriage))
 
+	mux.HandleFunc("/api/forgot-password", handleForgotPassword)
+	mux.HandleFunc("/api/reset-password", handleResetPassword)
+	mux.HandleFunc("/api/send-reset-email", handleSendResetEmail)
+
 	// auth config (Cognito setup exposed to frontends)
 	mux.HandleFunc("/api/auth/config", handleAuthConfig)
-	mux.HandleFunc("/api/forgot-password", handleForgotPassword)
 
 	// pages (host-based: op.* -> operators only, apex -> users only)
 	mux.HandleFunc("/", handleRoot)
@@ -387,47 +403,155 @@ func handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleForgotPassword builds a Cognito forgot-password URL from env vars and redirects.
-func handleForgotPassword(w http.ResponseWriter, r *http.Request) {
-	domain := os.Getenv("COGNITO_CUSTOMER_DOMAIN")
-	clientID := os.Getenv("COGNITO_CUSTOMER_CLIENT_ID")
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "eu-west-1"
+func generateToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func sendEmail(to, subject, htmlBody string) error {
+	if resendAPIKey != "" {
+		return sendResend(to, subject, htmlBody)
 	}
-	if domain == "" || clientID == "" {
-		// Cognito not configured — use demo self-service reset.
-		// Accept GET with ?email= param to show form, POST to execute reset.
-		if r.Method == http.MethodPost {
-			email := strings.TrimSpace(r.FormValue("email"))
-			newPass := r.FormValue("password")
-			if email == "" || !strings.Contains(email, "@") || newPass == "" || len(newPass) < 8 {
-				writeJSON(w, 400, map[string]string{"error": "valid email and password (min 8 chars) required"})
-				return
-			}
-			hash, err := hashPasswordBcrypt(newPass)
-			if err != nil {
-				writeJSON(w, 500, map[string]string{"error": "reset failed — please try again"})
-				return
-			}
-			tag, tagErr := db.Exec(r.Context(),
-				`UPDATE customers SET password_hash=$1 WHERE email=$2`, hash, email)
-			if tagErr != nil || tag.RowsAffected() == 0 {
-				slog.Error("password_reset_demo", "err", tagErr, "email", email)
-				writeJSON(w, 404, map[string]string{"error": "no account found with that email. Create a new account instead."})
-				return
-			}
-			slog.Info("password_reset_demo", "email", email)
-			writeJSON(w, 200, map[string]string{"status": "password reset — you can now log in"})
+	if smtpPass != "" {
+		return sendSMTP(to, subject, htmlBody)
+	}
+	return nil
+}
+
+func sendResend(to, subject, htmlBody string) error {
+	payload := map[string]any{
+		"from":    resendFrom,
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+resendAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("resend: %d %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+func sendSMTP(to, subject, htmlBody string) error {
+	fullBody := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
+		resendFrom, to, subject, htmlBody)
+	addr := net.JoinHostPort(smtpHost, smtpPort)
+	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: smtpHost})
+	if err != nil {
+		return fmt.Errorf("smtp dial: %w", err)
+	}
+	defer conn.Close()
+	client, err := smtp.NewClient(conn, smtpHost)
+	if err != nil {
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer client.Quit()
+	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("smtp auth: %w", err)
+	}
+	if err := client.Mail(smtpUser); err != nil {
+		return fmt.Errorf("smtp mail: %w", err)
+	}
+	if err := client.Rcpt(to); err != nil {
+		return fmt.Errorf("smtp rcpt: %w", err)
+	}
+	wc, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("smtp data: %w", err)
+	}
+	_, err = wc.Write([]byte(fullBody))
+	wc.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// handleForgotPassword: POST sends reset email via Resend; GET shows reset request page.
+func handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		email := strings.TrimSpace(r.FormValue("email"))
+		if email == "" || !strings.Contains(email, "@") {
+			writeJSON(w, 400, map[string]string{"error": "valid email required"})
 			return
 		}
-		// GET: show a simple inline password reset form.
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(200)
-		io.WriteString(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reset Password — Insucar</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
+		rawToken := generateToken()
+		tokenHash := sha256hex(rawToken)
+		expiresAt := time.Now().Add(1 * time.Hour)
+
+		var customerID string
+		err := db.QueryRow(r.Context(),
+			`SELECT id FROM customers WHERE email=$1`, email).Scan(&customerID)
+		if err != nil {
+			writeJSON(w, 200, map[string]string{"status": "if that email is registered, a reset link has been sent"})
+			return
+		}
+		db.Exec(r.Context(),
+			`INSERT INTO verification_tokens(customer_id,channel,token_hash,expires_at) VALUES($1,'email',$2,$3)`,
+			customerID, tokenHash, expiresAt)
+
+		resetURL := fmt.Sprintf("%s/api/reset-password?token=%s", appBaseURL, rawToken)
+		emailBody := "<p>You requested a password reset for your Roadrunner account.</p>" +
+			"<p><a href=\"" + resetURL + "\">Click here to reset your password</a></p>" +
+			"<p>Or copy this link: " + resetURL + "</p>" +
+			"<p><small>This link expires in 1 hour.</small></p>"
+
+		if sendErr := sendEmail(email, "Reset your password", emailBody); sendErr != nil {
+			slog.Error("send_reset_email", "err", sendErr, "email", email)
+			writeJSON(w, 500, map[string]string{"error": "failed to send email — please try again"})
+			return
+		}
+		slog.Info("reset_email_sent", "email", email)
+		writeJSON(w, 200, map[string]string{"status": "reset email sent — check your inbox"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(200)
+	io.WriteString(w, resetRequestPage())
+}
+
+func resetRequestPage() string {
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reset Password — Roadrunner</title>
+<style>` + authPageCSS() + `</style></head><body>
+<div class="card"><div class="card-h">Reset Your Password</div><div class="card-b">
+<p style="color:var(--muted);font-size:14px;margin:0 0 16px">Enter your email address and we'll send you a reset link.</p>
+<label>Email</label><input type="email" id="email" placeholder="you@example.com">
+<button class="btn btn-primary" onclick="sendReset()">Send Reset Link</button>
+<div id="msg"></div>
+<div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);font-size:13px">
+<a href="/app" style="color:var(--brand);text-decoration:none">Back to login</a>
+</div>
+</div></div>
+<script>
+async function sendReset(){
+ var e=document.getElementById("email").value.trim(),m=document.getElementById("msg");
+ if(!e||e.indexOf("@")<0){m.innerHTML='<span style="color:#c0392b">Valid email required</span>';return}
+ m.innerHTML='<span style="color:var(--muted)">Sending reset link…</span>';
+ var r=await fetch("/api/forgot-password",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"email="+encodeURIComponent(e)});
+ var b=await r.json();
+ if(r.ok){m.innerHTML='<span style="color:var(--brand)">Reset link sent! Check your email.</span>'}
+ else{m.innerHTML='<span style="color:#c0392b">'+b.error+'</span>'}
+}
+</script></body></html>`
+}
+
+func authPageCSS() string {
+	return `
 :root{--brand:#0a7d5a;--brand-d:#086a4d;--navy:#0b1f2a;--bg:#f4f8f6;--surface:#fff;--line:#e3ece8;--muted:#5b7183;--fg:#0b1f2a;--radius:14px;--font:Inter,system-ui,sans-serif}
 *{box-sizing:border-box}body{margin:0;font-family:var(--font);color:var(--fg);background:radial-gradient(700px 400px at 80% -10%,rgba(10,125,90,.10),transparent 60%),var(--bg);min-height:100vh;display:flex;align-items:center;justify-content:center}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 20px 60px rgba(11,31,42,.08);max-width:440px;width:100%;margin:20px}
@@ -437,46 +561,124 @@ input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10
 input:focus{outline:2px solid var(--brand);outline-offset:2px;border-color:var(--brand)}
 .btn{border:0;border-radius:10px;padding:12px;font-weight:700;font-size:15px;cursor:pointer;width:100%;margin-top:14px}
 .btn-primary{background:var(--brand);color:#fff}.btn-primary:hover{background:var(--brand-d)}
-#msg{margin-top:10px;font-size:13px;text-align:center}
-</style></head><body>
-<div class="card"><div class="card-h">🔑 Reset Your Password</div><div class="card-b">
-<p style="color:var(--muted);font-size:14px;margin:0 0 16px">Enter the email you registered with and choose a new password.</p>
-<label>Email</label><input type="email" id="email" placeholder="you@example.com">
+.btn-ghost{background:#eef4f1;color:var(--navy)}.btn-ghost:hover{background:#dce8e2}
+#msg{margin-top:10px;font-size:13px;text-align:center}`
+}
+
+func handleSendResetEmail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	var in struct{ Email string `json:"email"` }
+	json.NewDecoder(r.Body).Decode(&in)
+	email := strings.TrimSpace(in.Email)
+	if email == "" || !strings.Contains(email, "@") {
+		writeJSON(w, 400, map[string]string{"error": "valid email required"})
+		return
+	}
+	rawToken := generateToken()
+	tokenHash := sha256hex(rawToken)
+	expiresAt := time.Now().Add(1 * time.Hour)
+
+	var customerID string
+	err := db.QueryRow(r.Context(), `SELECT id FROM customers WHERE email=$1`, email).Scan(&customerID)
+	if err != nil {
+		writeJSON(w, 200, map[string]string{"status": "if that email is registered, a reset link has been sent"})
+		return
+	}
+	db.Exec(r.Context(),
+		`INSERT INTO verification_tokens(customer_id,channel,token_hash,expires_at) VALUES($1,'email',$2,$3)`,
+		customerID, tokenHash, expiresAt)
+	resetURL := fmt.Sprintf("%s/api/reset-password?token=%s", appBaseURL, rawToken)
+	emailBody := "<p>You requested a password reset for your Roadrunner account.</p>" +
+		"<p><a href=\"" + resetURL + "\">Click here to reset your password</a></p>" +
+		"<p>Or copy this link: " + resetURL + "</p>" +
+		"<p><small>This link expires in 1 hour.</small></p>"
+	if sendErr := sendEmail(email, "Reset your password", emailBody); sendErr != nil {
+		slog.Error("send_reset_email", "err", sendErr, "email", email)
+		writeJSON(w, 500, map[string]string{"error": "failed to send email"})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "reset email sent"})
+}
+
+func handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(400)
+		io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><title>Invalid Link — Roadrunner</title><style>`+authPageCSS()+`</style></head><body>
+<div class="card"><div class="card-h">Invalid Reset Link</div><div class="card-b">
+<p style="color:#c0392b">This password reset link is missing or invalid.</p>
+<a href="/app" style="color:var(--brand);text-decoration:none;font-weight:600">Back to login</a>
+</div></div></body></html>`)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		newPass := r.FormValue("password")
+		if newPass == "" || len(newPass) < 8 {
+			writeJSON(w, 400, map[string]string{"error": "password must be at least 8 characters"})
+			return
+		}
+		tokenHash := sha256hex(token)
+		var customerID string
+		err := db.QueryRow(r.Context(),
+			`DELETE FROM verification_tokens WHERE token_hash=$1 AND channel='email' AND expires_at > now() RETURNING customer_id`,
+			tokenHash).Scan(&customerID)
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid or expired reset link"})
+			return
+		}
+		hash, hashErr := hashPasswordBcrypt(newPass)
+		if hashErr != nil {
+			writeJSON(w, 500, map[string]string{"error": "reset failed — please try again"})
+			return
+		}
+		db.Exec(r.Context(), `UPDATE customers SET password_hash=$1 WHERE id=$2`, hash, customerID)
+		db.Exec(r.Context(), `UPDATE customers SET email_verified=true WHERE id=$2`, hash, customerID)
+		slog.Info("password_reset", "customer_id", customerID)
+		writeJSON(w, 200, map[string]string{"status": "password reset — you can now log in"})
+		return
+	}
+
+	tokenHash := sha256hex(token)
+	var email string
+	err := db.QueryRow(r.Context(),
+		`SELECT c.email FROM verification_tokens vt JOIN customers c ON c.id=vt.customer_id WHERE vt.token_hash=$1 AND vt.channel='email' AND vt.expires_at > now()`,
+		tokenHash).Scan(&email)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(400)
+		io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><title>Expired Link — Roadrunner</title><style>`+authPageCSS()+`</style></head><body>
+<div class="card"><div class="card-h">Link Expired</div><div class="card-b">
+<p style="color:#c0392b">This password reset link has expired or is invalid. Reset links are valid for 1 hour.</p>
+<a href="/app" style="display:inline-block;background:var(--brand);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:10px">Request a new link</a>
+</div></div></body></html>`)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(200)
+	io.WriteString(w, fmt.Sprintf(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reset Password — Roadrunner</title><style>%s</style></head><body>
+<div class="card"><div class="card-h">Choose a New Password</div><div class="card-b">
+<p style="color:var(--muted);font-size:14px;margin:0 0 16px">Enter a new password for <b>%s</b>.</p>
 <label>New password (min 8 chars)</label><input type="password" id="pass" placeholder="New password">
 <button class="btn btn-primary" onclick="doReset()">Reset Password</button>
 <div id="msg"></div>
-<div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);font-size:13px">
-<a href="/app" style="color:var(--brand);text-decoration:none">← Back to login</a>
-</div>
 </div></div>
 <script>
 async function doReset(){
- var e=document.getElementById("email").value.trim(),p=document.getElementById("pass").value;
- var m=document.getElementById("msg");
- if(!e||e.indexOf("@")<0){m.innerHTML='<span style="color:#c0392b">Valid email required</span>';return}
+ var p=document.getElementById("pass").value,m=document.getElementById("msg");
  if(!p||p.length<8){m.innerHTML='<span style="color:#c0392b">Password must be at least 8 characters</span>';return}
  m.innerHTML='<span style="color:var(--muted)">Resetting…</span>';
- var r=await fetch("/api/forgot-password",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"email="+encodeURIComponent(e)+"&password="+encodeURIComponent(p)});
+ var r=await fetch("/api/reset-password?token=%s",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"password="+encodeURIComponent(p)});
  var b=await r.json();
- if(r.ok){m.innerHTML='<span style="color:var(--brand)">✅ Password reset! <a href="/app">Log in now →</a></span>'}
+ if(r.ok){m.innerHTML='<span style="color:var(--brand)">Password reset! <a href="/app">Log in now</a></span>'}
  else{m.innerHTML='<span style="color:#c0392b">'+b.error+'</span>'}
 }
-</script></body></html>`)
-		return
-	}
-	state := fmt.Sprintf("%x", sha256.Sum256([]byte(time.Now().String())))[:16]
-	// Derive redirect URI from the request host for per-environment correctness.
-	scheme := "https"
-	if r.TLS == nil {
-		// Allow http fallback for local dev; Cognito app client must allow http://localhost redirects.
-		if h := r.Host; strings.HasPrefix(h, "localhost") || strings.HasPrefix(h, "127.0.0.1") {
-			scheme = "http"
-		}
-	}
-	redirectURI := fmt.Sprintf("%s://%s/app", scheme, r.Host)
-	url := fmt.Sprintf("https://%s.auth.%s.amazoncognito.com/forgotPassword?response_type=code&client_id=%s&redirect_uri=%s&state=%s&scope=openid+email+profile",
-		domain, region, clientID, redirectURI, state)
-	http.Redirect(w, r, url, http.StatusFound)
+</script></body></html>`, authPageCSS(), email, url.QueryEscape(token)))
 }
 
 // ---------- handlers ----------
@@ -1996,7 +2198,8 @@ func csrfMW(next http.Handler) http.Handler {
 		if strings.HasPrefix(path, "/api/") &&
 			(strings.HasSuffix(path, "/login") || strings.HasSuffix(path, "/register") ||
 				path == "/api/register" || path == "/api/auth/config" ||
-				path == "/api/forgot-password") {
+				path == "/api/forgot-password" || path == "/api/reset-password" ||
+				path == "/api/send-reset-email") {
 			next.ServeHTTP(w, r)
 			return
 		}

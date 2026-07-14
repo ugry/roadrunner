@@ -7,6 +7,14 @@ services:
     volumes:
       - ../db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ../db/schema-v3-additions.sql:/docker-entrypoint-initdb.d/03-schema-v3.sql:ro
+      - ../db/schema-v4-auth.sql:/docker-entrypoint-initdb.d/04-schema-v4.sql:ro
+      - ../db/schema-v5-cognito.sql:/docker-entrypoint-initdb.d/05-schema-v5.sql:ro
+      - ../db/schema-v6-operator.sql:/docker-entrypoint-initdb.d/06-schema-v6.sql:ro
+      - ../db/schema-v7-admin.sql:/docker-entrypoint-initdb.d/07-schema-v7.sql:ro
+      - ../db/schema-v8-ratelimits.sql:/docker-entrypoint-initdb.d/08-schema-v8.sql:ro
+      - ../db/seed-users.sql:/docker-entrypoint-initdb.d/09-seed-users.sql:ro
+      - ../db/seed-tenant.sql:/docker-entrypoint-initdb.d/10-seed-tenant.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d insucar"]
       interval: 3s
@@ -17,6 +25,13 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgres://postgres:test@db:5432/insucar?sslmode=disable
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-Roadrunner <noreply@roadrunner.app>}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      SMTP_HOST: ${SMTP_HOST:-smtp.hostinger.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-ugur.yardimci@unygms.com}
+      SMTP_PASS: ${SMTP_PASS:-}
     depends_on:
       db:
         condition: service_healthy
