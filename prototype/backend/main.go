@@ -304,8 +304,7 @@ func sanitizeName(s string) string {
 	cleaned = strings.ReplaceAll(cleaned, "onload=", "")
 	// Reject if contains suspicious characters after cleaning
 	if cleaned != s && strings.TrimSpace(s) != cleaned {
-		// Stripped something — log for audit
-		slog.Warn("xss_sanitized", "original", s[:min(50, len(s))])
+		logEvent("security.xss_stripped", "original", s[:min(50, len(s))])
 	}
 	return cleaned
 }
@@ -706,17 +705,19 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 		`SELECT id,first_name,last_name,password_hash FROM customers WHERE email=$1`, in.Email).
 		Scan(&id, &first, &last, &hash)
 	if err != nil || hash == nil || !verifyPassword(*hash, in.Password) {
+		logEvent("auth.login.failed", "email", in.Email, "reason", "invalid_credentials", "remote", clientIP(r))
 		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
 		return
 	}
-	// Upgrade legacy SHA-256 hash to bcrypt on successful login
 	if isLegacyHash(*hash) {
 		if newHash, e := hashPasswordBcrypt(in.Password); e == nil {
 			db.Exec(r.Context(), `UPDATE customers SET password_hash=$1 WHERE id=$2`, newHash, id)
+			logEvent("auth.password.upgraded", "uid", id, "from", "sha256", "to", "bcrypt")
 		}
 	}
 	setSession(w, "user", id, first+" "+last)
 	db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('auth.user.login',$1,'{}')`, in.Email)
+	logEvent("auth.login.success", "role", "user", "uid", id, "email", in.Email, "remote", clientIP(r))
 	writeJSON(w, 200, map[string]any{"role": "user", "id": id, "name": first + " " + last})
 }
 
@@ -737,10 +738,10 @@ func handleAgentLogin(w http.ResponseWriter, r *http.Request) {
 		`SELECT id,display_name,role::text,password_hash FROM staff WHERE agent_id=$1 AND active`, agentID).
 		Scan(&id, &name, &role, &hash)
 	if err != nil || hash == nil || !verifyPassword(*hash, in.Password) {
+		logEvent("auth.agent_login.failed", "agent_id", agentID, "reason", "invalid_credentials", "remote", clientIP(r))
 		writeJSON(w, 401, map[string]string{"error": "invalid credentials"})
 		return
 	}
-	// Upgrade legacy SHA-256 hash to bcrypt on successful login
 	if isLegacyHash(*hash) {
 		if newHash, e := hashPasswordBcrypt(in.Password); e == nil {
 			db.Exec(r.Context(), `UPDATE staff SET password_hash=$1 WHERE id=$2`, newHash, id)
@@ -749,15 +750,25 @@ func handleAgentLogin(w http.ResponseWriter, r *http.Request) {
 	setSession(w, "agent", id, name)
 	db.Exec(r.Context(), `INSERT INTO audit_ledger(event_type,actor,payload) VALUES('auth.agent.login',$1,$2)`,
 		agentID, fmt.Sprintf(`{"role":"%s"}`, role))
+	logEvent("auth.login.success", "role", "agent", "uid", id, "agent_id", agentID, "staff_role", role, "remote", clientIP(r))
 	writeJSON(w, 200, map[string]any{"role": "agent", "id": id, "name": name, "staff_role": role, "agent_id": agentID})
 }
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
+	c, _ := callerFrom(r)
 	http.SetCookie(w, &http.Cookie{Name: "insucar_session", Value: "", Path: "/",
 		MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	http.SetCookie(w, &http.Cookie{Name: "csrf_token", Value: "", Path: "/",
 		MaxAge: -1, Secure: true, SameSite: http.SameSiteStrictMode})
+	logEvent("auth.logout", "role", safeStr(c, "role"), "uid", safeStr(c, "id"))
 	writeJSON(w, 200, map[string]string{"status": "logged_out"})
+}
+
+func safeStr(c *caller, field string) string {
+	if c == nil { return "" }
+	if field == "role" { return c.Role }
+	if field == "id" { return c.ID }
+	return ""
 }
 
 func handleMe(w http.ResponseWriter, r *http.Request) {
@@ -874,6 +885,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		in.Email, fmt.Sprintf(`{"customer_id":"%s"}`, id))
 	setSession(w, "user", id, in.First+" "+in.Last)
 	publishEvent(r.Context(), "customer.registered", map[string]any{"customer_id": id, "email": in.Email})
+	logEvent("auth.register", "uid", id, "email", email, "country", country, "remote", clientIP(r))
 	writeJSON(w, 201, map[string]string{"customer_id": id, "status": "active"})
 }
 
@@ -912,7 +924,11 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Address != "" || in.Lat != "" {
-		db.Exec(r.Context(), `INSERT INTO case_locations(case_id,address_text,capture_method) VALUES($1,$2,'app')`, cid, in.Address)
+		if in.Lat != "" && in.Lng != "" {
+			db.Exec(r.Context(), `INSERT INTO case_locations(case_id,address_text,geog,capture_method) VALUES($1,$2,ST_SetSRID(ST_MakePoint($4::float,$3::float),4326),'app')`, cid, in.Address, in.Lat, in.Lng)
+		} else {
+			db.Exec(r.Context(), `INSERT INTO case_locations(case_id,address_text,capture_method) VALUES($1,$2,'app')`, cid, in.Address)
+		}
 	}
 	note := "customer submitted via app: " + in.Description
 	if in.PhotoID != "" {
@@ -921,6 +937,7 @@ func handleUserIncident(w http.ResponseWriter, r *http.Request) {
 	db.Exec(r.Context(), `INSERT INTO interaction_log(case_id,event_type,note) VALUES($1,'note',$2)`, cid, note)
 	publishEvent(r.Context(), "case.created", map[string]any{"case_id": cid, "case_number": caseNo, "incident": nz(in.Incident, "breakdown"), "customer_id": uid})
 	publishSSE("case.created", map[string]any{"case_id": cid, "case_number": caseNo, "incident": nz(in.Incident, "breakdown")})
+	logEvent("incident.created", "case_id", cid, "case_number", caseNo, "incident", nz(in.Incident, "breakdown"), "uid", uid, "has_location", in.Lat != "" || in.Address != "", "remote", clientIP(r))
 	writeJSON(w, 201, map[string]string{"case_id": cid, "case_number": caseNo, "status": "triaging"})
 }
 
@@ -1038,9 +1055,19 @@ func handleAgentCase(w http.ResponseWriter, r *http.Request) {
 		 FROM case_safety WHERE case_id=$1`, id).
 		Scan(&safe, &inTraffic, &onShoulder, &vulnerable, &isDark, &weather)
 
+	// location
+	var locAddr, locW3w *string
+	var locLat, locLng *float64
+	db.QueryRow(r.Context(),
+		`SELECT address_text, what3words, ST_Y(geog::geometry), ST_X(geog::geometry) FROM case_locations WHERE case_id=$1`, id).
+		Scan(&locAddr, &locW3w, &locLat, &locLng)
+
 	writeJSON(w, 200, map[string]any{
 		"case_number": no, "status": st, "priority": pr, "incident": inc, "description": desc,
 		"customer": who, "phone": phone, "created_at": createdAt,
+		"location": map[string]any{
+			"address": s(locAddr), "lat": locLat, "lng": locLng, "what3words": s(locW3w),
+		},
 		"policy": map[string]any{
 			"number": s(pol), "coverage": s(cov),
 			"excess": excess, "callout_limit": calloutLimit,
@@ -1303,7 +1330,7 @@ func handleDispatch(w http.ResponseWriter, r *http.Request) {
 
 	result, err := dispatchWithFallback(r.Context(), in.CaseID, svc, in.ProviderID)
 	if err != nil {
-		slog.Error("dispatch_failed", "err", err, "case_id", in.CaseID, "service", svc)
+		logEvent("dispatch.failed", "case_id", in.CaseID, "service", svc, "provider", in.ProviderID, "err", err.Error())
 		writeJSON(w, 500, map[string]string{"error": "dispatch failed — all providers unavailable"})
 		return
 	}
@@ -1320,6 +1347,7 @@ func handleDispatch(w http.ResponseWriter, r *http.Request) {
 		"case_id": in.CaseID, "mission_id": mid, "provider": provName,
 		"eta_minutes": eta, "source": src, "attempted": result["attempted"],
 	})
+	logEvent("dispatch.success", "case_id", in.CaseID, "mission_id", mid, "provider", provName, "eta_minutes", eta, "source", src, "service", svc, "attempted", result["attempted"])
 
 	status := "en_route"
 	writeJSON(w, 201, map[string]any{
@@ -1795,6 +1823,7 @@ func rateLimitMW(next http.Handler) http.Handler {
 			rlCountMu.Unlock()
 			if over {
 				w.Header().Set("Retry-After", "60")
+				logEvent("security.rate_limit", "path", r.URL.Path, "remote", clientIP(r), "rpm", cfg.RPM)
 				writeJSON(w, 429, map[string]string{"error": "rate limit exceeded — please slow down"})
 				return
 			}
@@ -2141,16 +2170,49 @@ func sanitizePolicyInput(fields ...string) bool {
 var appLogger *slog.Logger
 
 func init() {
+	logDir := getenv("LOG_DIR", "/var/log/roadrunner")
+	os.MkdirAll(logDir, 0755)
+	logFile, err := os.OpenFile(logDir+"/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
-	appLogger = slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	var handler slog.Handler
+	if err == nil {
+		handler = slog.NewJSONHandler(io.MultiWriter(os.Stdout, logFile), opts)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	}
+	appLogger = slog.New(handler)
 	slog.SetDefault(appLogger)
 }
 
-// slogLogMW replaces logMW with structured JSON logging.
+func logEvent(event string, args ...any) {
+	a := make([]any, 0, len(args)+2)
+	a = append(a, "event", event)
+	a = append(a, args...)
+	slog.Info("", a...)
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+	written int64
+}
+
+func (rw *responseWriter) WriteHeader(code int) { rw.status = code; rw.ResponseWriter.WriteHeader(code) }
+func (rw *responseWriter) Write(b []byte) (int, error) { n, err := rw.ResponseWriter.Write(b); rw.written += int64(n); return n, err }
+
+// slogLogMW logs every request with status, latency, user, IP, user-agent.
 func slogLogMW(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("request", "method", r.Method, "path", r.URL.Path, "remote", clientIP(r))
-		h.ServeHTTP(w, r)
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, status: 200}
+		h.ServeHTTP(rw, r)
+		latency := time.Since(start).Milliseconds()
+		c, _ := callerFrom(r)
+		role, uid := "", ""
+		if c != nil { role = c.Role; uid = c.ID }
+		logEvent("http", "method", r.Method, "path", r.URL.Path, "status", rw.status,
+			"latency_ms", latency, "bytes", rw.written, "remote", clientIP(r),
+			"role", role, "uid", uid, "ua", r.UserAgent())
 	})
 }
 
@@ -2213,13 +2275,13 @@ func csrfMW(next http.Handler) http.Handler {
 		// Validate CSRF
 		csrfCookie, err := r.Cookie("csrf_token")
 		if err != nil {
-			slog.Warn("csrf_missing_cookie", "path", path, "method", r.Method, "remote", clientIP(r))
+			logEvent("security.csrf.missing", "path", path, "method", r.Method, "remote", clientIP(r), "ua", r.UserAgent())
 			writeJSON(w, 403, map[string]string{"error": "csrf token required — refresh the page and try again"})
 			return
 		}
 		headerToken := r.Header.Get("X-CSRF-Token")
 		if headerToken == "" || !hmac.Equal([]byte(headerToken), []byte(csrfCookie.Value)) {
-			slog.Warn("csrf_mismatch", "path", path, "method", r.Method, "remote", clientIP(r))
+			logEvent("security.csrf.mismatch", "path", path, "method", r.Method, "remote", clientIP(r), "ua", r.UserAgent())
 			writeJSON(w, 403, map[string]string{"error": "invalid csrf token"})
 			return
 		}

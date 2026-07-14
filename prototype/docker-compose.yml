@@ -33,6 +33,8 @@ services:
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-ugur.yardimci@unygms.com}
       SMTP_PASS: ${SMTP_PASS:-}
+    volumes:
+      - /var/log/roadrunner:/var/log/roadrunner
     depends_on:
       db:
         condition: service_healthy
