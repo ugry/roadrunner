@@ -5,6 +5,7 @@ services:
       POSTGRES_PASSWORD: test
       POSTGRES_DB: insucar
     volumes:
+      - pgdata:/var/lib/postgresql/data
       - ../db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
       - ../db/schema-v3-additions.sql:/docker-entrypoint-initdb.d/03-schema-v3.sql:ro
@@ -37,3 +38,6 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+
+volumes:
+  pgdata:
