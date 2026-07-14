@@ -124,7 +124,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 
 <script>
 var ag='';try{ag=JSON.parse(localStorage.getItem('cognito_tokens')||'{}').access_token||'';}catch(_){}
-function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});if(ag)o.headers['Authorization']='Bearer '+ag;else o.credentials='include';return fetch(p,o).then(r=>r.json().then(b=>({ok:r.ok,status:r.status,body:b})).catch(()=>({ok:r.ok,status:r.status,body:{}})));}
+function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});if(ag)o.headers['Authorization']='Bearer '+ag;else o.credentials='include';var csrf=document.cookie.split('; ').find(function(r){return r.startsWith('csrf_token=')});if(csrf)o.headers['X-CSRF-Token']=csrf.split('=')[1];return fetch(p,o).then(r=>r.json().then(b=>({ok:r.ok,status:r.status,body:b})).catch(()=>({ok:r.ok,status:r.status,body:{}})));}
 function showMsg(t,c){var e=document.getElementById('msg');e.textContent=t;e.className=c;setTimeout(function(){e.className=''},4000);}
 function v(id){return document.getElementById(id).value;}
 function el(id){return document.getElementById(id);}

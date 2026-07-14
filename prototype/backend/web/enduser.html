@@ -171,6 +171,8 @@ function bearerApi(p, o) {
   if (tok && tok.access_token && Date.now() < tok.expires_at) {
     o.headers['Authorization'] = 'Bearer ' + tok.access_token;
   }
+  var csrf = document.cookie.split('; ').find(function(r){return r.startsWith('csrf_token=')});
+  if (csrf) { o.headers['X-CSRF-Token'] = csrf.split('=')[1]; }
   return fetch(p, o).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, status: r.status, body: b }; }).catch(function() { return { ok: r.ok, status: r.status, body: {} }; }); });
 }
 
